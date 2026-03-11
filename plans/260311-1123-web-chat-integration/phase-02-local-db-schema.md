@@ -5,7 +5,7 @@
 
 ## Overview
 **Priority:** High
-**Status:** Not Started
+**Status:** Completed
 **Description:** Thiết lập `Dexie.js` quản lý IndexedDB. Tối ưu hóa Table Schema để có thể lọc dữ liệu tốc độ cao (indexing) cho thuật toán Gap Strategy (Tìm khoảng trống tin nhắn).
 
 ## Requirements
@@ -37,10 +37,10 @@ class ChatDatabase extends Dexie {
 4. Tạo Table trư trữ SharedGroupKey để Worker xài lúc mã hóa/giải mã.
 
 ## Todo List
-- [ ] Setup file `db.ts` chứa Dexie Schema.
-- [ ] Define Message interfaces (ID, Text, Sender, Timestamp, Status).
-- [ ] Viết hàm `fetchMessages(roomId, limit)`.
-- [ ] Viết hàm lưu và cập nhật trạng thái `pending -> sent`.
+- [x] Setup file `db.ts` chứa Dexie Schema.
+- [x] Define Message interfaces (ID, Text, Sender, Timestamp, Status).
+- [x] Viết hàm `fetchMessages(roomId, limit)`.
+- [x] Viết hàm lưu và cập nhật trạng thái `pending -> sent`.
 
 ## Risk Assessment
 - Xóa Cache trình duyệt sẽ bay mất Database, mất mọi Key mã hóa -> Cần phải tính phương án người dùng xuất Backup File (JSON).

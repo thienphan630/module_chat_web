@@ -24,7 +24,7 @@ Bản kế hoạch triển khai dựa trên Blueprint `brainstormer-260311-1120-
 - ✅ **Phase 02: Thiết lập Local Database & Schema (Completed)**
   - Cấu trúc các bảng dữ liệu cho IndexedDB lưu lại Message, Khóa mã hóa.
 
-- 📝 **Phase 03: Xây dựng Crypto Engine (Web Worker)**
+- ✅ **Phase 03: Xây dựng Crypto Engine (Completed)**
   - Tách luồng mã hóa E2EE và UUIDv7 sang Web Worker để bảo vệ Main Thread.
 
 - 📝 **Phase 04: Hạ tầng WebSocket & Xác thực (Networking)**

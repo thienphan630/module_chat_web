@@ -5,7 +5,7 @@
 
 ## Overview
 **Priority:** High
-**Status:** Not Started
+**Status:** Completed
 **Description:** Chuyển tải thuật toán sinh định danh `UUIDv7`, cùng logic E2E Encrypt/Decrypt Text Message và Media (`FileKey`) sang một Background Web Worker để UI không bị treo cứng (Drop Frame) khi nhận/gửi số lượng lớn message lúc Fetch API Gap.
 
 ## Requirements
@@ -38,11 +38,11 @@ interface WorkerResponse {
 Ví dụ: `const ciphertext = await runWorkerTask('ENCRYPT_TEXT', payload, groupKey);`
 
 ## Todo List
-- [ ] Setup `crypto.worker.ts` & Configure Vite build for worker
-- [ ] Implement `UUIDv7` generation function
-- [ ] Implement Web Crypto API `AES-GCM` encrypt/decrypt logic
-- [ ] Create Promise Request-Reply flow helper cho giao tiếp Main-Worker
-- [ ] Viết UnitTest (Test Worker logic độc lập không cần UI).
+- [x] Setup `crypto.worker.ts` & Configure Vite build for worker
+- [x] Implement `UUIDv7` generation function
+- [x] Implement Web Crypto API `AES-GCM` encrypt/decrypt logic
+- [x] Create Promise Request-Reply flow helper cho giao tiếp Main-Worker
+- [x] Viết UnitTest (Test Worker logic độc lập không cần UI).
 
 ## Security Considerations
 - Đảm bảo Master Keys gửi vào Worker để giải mã sẽ bị giới hạn quyền truy xuất. File Worker không nhúng Script mờ ám thứ 3 (tránh đánh cắp Khóa qua CDN lạ bị tấn công).

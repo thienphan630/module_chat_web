@@ -18,7 +18,7 @@ Bản kế hoạch triển khai dựa trên Blueprint `brainstormer-260311-1120-
 - ✅ **Lên giải pháp (Completed)**
   - Đã chốt kiến trúc Technical Stack và Gap Pagination Strategy.
 
-- 📝 **Phase 01: Thiết lập Core Project (Project Setup)**
+- ✅ **Phase 01: Thiết lập Core Project (Completed)**
   - Khởi tạo React (Vite), Zustand, TailwindCSS, cấu trúc thư mục.
 
 - 📝 **Phase 02: Thiết lập Local Database & Schema (Dexie.js)**

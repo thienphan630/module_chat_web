@@ -5,7 +5,7 @@
 
 ## Overview
 **Priority:** High
-**Status:** Not Started
+**Status:** Completed
 **Description:** Thiết lập bộ khung ứng dụng React (Vite) ban đầu, cài đặt các thư viện cần thiết, định nghĩa cấu trúc thư mục (Folder Structure).
 
 ## Requirements
@@ -36,11 +36,11 @@ src/
 6. Cấu hình biến môi trường (`.env`) như `VITE_API_URL` và `VITE_WS_URL`.
 
 ## Todo List
-- [ ] Initialize Vite project
-- [ ] Install deps (TanStack Query, Zustand, Dexie, uuid, etc)
-- [ ] Configure Tailwind CSS & PostCSS
-- [ ] Setup Folder Structure & absolute alias
-- [ ] Create base Zustand Store
+- [x] Initialize Vite project
+- [x] Install deps (TanStack Query, Zustand, Dexie, uuid, etc)
+- [x] Configure Tailwind CSS & PostCSS
+- [x] Setup Folder Structure & absolute alias
+- [x] Create base Zustand Store
 
 ## Success Criteria
 - Lệnh `npm run dev` hoạt động không bị lỗi.

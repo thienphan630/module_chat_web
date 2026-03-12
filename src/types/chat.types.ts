@@ -16,3 +16,15 @@ export interface RoomKey {
     shared_key: string // Base64 encoded or hex encoded symmetric key for the room
     created_at: number
 }
+
+export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system';
+
+export interface WS_Payload {
+    type: WS_Event_Type;
+    token?: string;
+    room_id?: string;
+    message_id?: string;
+    server_ts?: number;
+    code?: string;
+    data?: any; // Ciphertext từ user khác khi nhận event message
+}

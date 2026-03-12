@@ -39,9 +39,9 @@ export const RoomList = () => {
                     <ul className="divide-y divide-zinc-800/50">
                         {rooms?.map(room => (
                             <li
-                                key={room.id}
-                                onClick={() => handleJoinRoom(room.id)}
-                                className={`cursor-pointer p-4 transition-colors hover:bg-zinc-900 ${currentRoomId === room.id ? 'bg-zinc-900/80 border-l-4 border-emerald-500' : 'border-l-4 border-transparent'}`}
+                                key={room.room_id}
+                                onClick={() => handleJoinRoom(room.room_id)}
+                                className={`cursor-pointer p-4 transition-colors hover:bg-zinc-900 ${currentRoomId === room.room_id ? 'bg-zinc-900/80 border-l-4 border-emerald-500' : 'border-l-4 border-transparent'}`}
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">

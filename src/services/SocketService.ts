@@ -1,6 +1,10 @@
 import { useChatStore } from '../store/chatStore'
 import type { WS_Payload, ChatMessage } from '../types/chat.types'
+import { WS_ERROR_CODES } from '../types/chat.types'
 import { addMessage, updateMessageStatus } from '../utils/db'
+import { api } from '../lib/api'
+
+const AUTH_TIMEOUT_MS = 3000 // Server expects auth within 3 seconds
 
 class SocketService {
     private static instance: SocketService;
@@ -8,6 +12,7 @@ class SocketService {
     private reconnectAttempts = 0;
     private readonly maxReconnectAttempts = 5;
     private reconnectTimeout: number | null = null;
+    private authTimeout: number | null = null;
     private url: string;
     private isPaused = false;
 
@@ -27,7 +32,7 @@ class SocketService {
             return;
         }
 
-        const currentToken = token || localStorage.getItem('token') || '';
+        const currentToken = token || useChatStore.getState().accessToken || '';
 
         useChatStore.getState().setConnectionStatus('connecting');
 
@@ -37,11 +42,16 @@ class SocketService {
             this.reconnectAttempts = 0;
             useChatStore.getState().setConnectionStatus('connected');
 
-            // Push auth payload to avoid URI leak
+            // Push auth payload — must arrive within 3 seconds
             this.sendPayload({
                 type: 'auth',
                 token: currentToken
             });
+
+            // Set auth timeout — server closes connection if auth not received in time
+            this.authTimeout = window.setTimeout(() => {
+                console.warn('[SocketService] Auth timeout — no response within 3s');
+            }, AUTH_TIMEOUT_MS);
 
             // Flush offline queue if any
             this.flushQueue();
@@ -50,6 +60,13 @@ class SocketService {
         this.socket.onmessage = (event) => {
             try {
                 const payload: WS_Payload = JSON.parse(event.data);
+
+                // Clear auth timeout on any successful server response
+                if (this.authTimeout) {
+                    clearTimeout(this.authTimeout);
+                    this.authTimeout = null;
+                }
+
                 this.handleMessage(payload);
             } catch (error) {
                 console.error('Failed to parse WS message', error);
@@ -57,6 +74,7 @@ class SocketService {
         };
 
         this.socket.onclose = (event) => {
+            this.clearAuthTimeout();
             useChatStore.getState().setConnectionStatus('disconnected');
             if (event.code !== 1000) { // Normal closure
                 this.reconnect();
@@ -69,9 +87,16 @@ class SocketService {
         };
     }
 
+    private clearAuthTimeout() {
+        if (this.authTimeout) {
+            clearTimeout(this.authTimeout);
+            this.authTimeout = null;
+        }
+    }
+
     private handleMessage(payload: WS_Payload) {
-        if (payload.type === 'error' && payload.code === 'TOKEN_EXPIRED') {
-            this.handleTokenExpired();
+        if (payload.type === 'error') {
+            this.handleError(payload);
             return;
         }
 
@@ -111,27 +136,53 @@ class SocketService {
         }
     }
 
+    private handleError(payload: WS_Payload) {
+        switch (payload.code) {
+            case WS_ERROR_CODES.TOKEN_EXPIRED:
+                this.handleTokenExpired();
+                break;
+            case WS_ERROR_CODES.INVALID_AUTH_FRAME:
+                console.error('[SocketService] Invalid auth frame format — disconnecting');
+                this.disconnect();
+                break;
+            case WS_ERROR_CODES.NOT_A_MEMBER:
+                console.warn(`[SocketService] Not a member: ${payload.data?.message || payload.room_id}`);
+                break;
+            default:
+                console.error('[SocketService] WS Error:', payload.code, payload.data);
+                break;
+        }
+    }
+
     private async handleTokenExpired() {
         this.isPaused = true;
+        const chatStore = useChatStore.getState();
+        const currentRefreshToken = chatStore.refreshToken;
+
+        if (!currentRefreshToken) {
+            console.error('[SocketService] No refresh token available — disconnecting');
+            chatStore.clearAuth();
+            this.disconnect();
+            return;
+        }
+
         try {
-            // Simulated REST API call for refresh token
-            const response = await fetch('/api/refresh', { method: 'POST' });
-            if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem('token', data.token);
-                // Re-authenticate current WS
-                this.sendPayload({
-                    type: 'auth',
-                    token: data.token
-                });
-                this.isPaused = false;
-                this.flushQueue();
-            } else {
-                // If refresh fails, disconnect and probably push to login
-                this.disconnect();
-            }
+            // Use api.refreshToken() with correct endpoint /api/v1/auth/refresh
+            const data = await api.refreshToken(currentRefreshToken);
+
+            // Token rotation: save BOTH new tokens immediately
+            chatStore.setTokens(data.access_token, data.refresh_token);
+
+            // Re-authenticate current WS with new access token
+            this.sendPayload({
+                type: 'auth',
+                token: data.access_token
+            });
+            this.isPaused = false;
+            this.flushQueue();
         } catch (err) {
-            console.error('Failed to refresh token', err);
+            console.error('[SocketService] Failed to refresh token', err);
+            chatStore.clearAuth();
             this.disconnect();
         }
     }
@@ -158,6 +209,7 @@ class SocketService {
     }
 
     public disconnect() {
+        this.clearAuthTimeout();
         if (this.socket) {
             this.socket.close(1000, 'User triggered disconnect');
             this.socket = null;
@@ -202,3 +254,4 @@ class SocketService {
 }
 
 export const socketService = SocketService.getInstance();
+

@@ -5,8 +5,10 @@ import type { ChatMessage } from '../../types/chat.types'
 import { SendHorizontal, Paperclip, LoaderCircle } from 'lucide-react'
 import { api } from '../../lib/api'
 import { addMessage as addMessageToDB } from '../../utils/db'
+import { useChatStore } from '../../store/chatStore'
 
 export const InputArea = ({ roomId }: { roomId: string }) => {
+    const currentUserId = useChatStore((s) => s.currentUserId)
     const [text, setText] = useState('')
     const [isUploading, setIsUploading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -21,7 +23,7 @@ export const InputArea = ({ roomId }: { roomId: string }) => {
         const msg: ChatMessage = {
             message_id: messageId,
             room_id: roomId,
-            sender_id: 'me', // Normally from auth ctx
+            sender_id: currentUserId, // Normally from auth ctx
             server_ts: Date.now(), // Optimistic TS
             text: text, // Store plaintext for immediate render locally
             ciphertext: fakeCipher,
@@ -60,7 +62,7 @@ export const InputArea = ({ roomId }: { roomId: string }) => {
             const msg: ChatMessage = {
                 message_id: messageId,
                 room_id: roomId,
-                sender_id: 'me',
+                sender_id: currentUserId,
                 server_ts: Date.now(),
                 text: `📎 ${file.name}`,
                 ciphertext: fakeCipher,

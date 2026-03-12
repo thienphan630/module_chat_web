@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Environment
+.env
+.env.*
+
+# Agent & plans (internal)
+.agent/
+plans/
+check-errors.cjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -31,3 +31,4 @@ check-errors.cjs
 *.njsproj
 *.sln
 *.sw?
+tmp.json

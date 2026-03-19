@@ -1,4 +1,5 @@
 import { v7 as uuidv7 } from 'uuid'
+import _sodium from 'libsodium-wrappers'
 import type { WorkerRequest, WorkerResponse } from './crypto.types'
 
 // Setup native crypto api
@@ -135,6 +136,58 @@ async function handleDecryptFile(encryptedBlob: Blob, fileKeyStr: string): Promi
     return new Blob([decryptedBuffer])
 }
 
+export async function handleGenerateKeys() {
+    await _sodium.ready;
+    const sodium = _sodium;
+    
+    // Generate Identity Key (Ed25519 - used for signing)
+    const identityKeyPair = sodium.crypto_sign_keypair();
+    const identityKeyPub = sodium.to_base64(identityKeyPair.publicKey, sodium.base64_variants.ORIGINAL);
+    const identityKeyPriv = sodium.to_base64(identityKeyPair.privateKey, sodium.base64_variants.ORIGINAL);
+
+    // Generate Signed Pre-Key (X25519 - used for ECDH)
+    const signedPreKeyPair = sodium.crypto_box_keypair();
+    const signedPreKeyPub = sodium.to_base64(signedPreKeyPair.publicKey, sodium.base64_variants.ORIGINAL);
+    const signedPreKeyPriv = sodium.to_base64(signedPreKeyPair.privateKey, sodium.base64_variants.ORIGINAL);
+    
+    // Sign the public key of the Signed Pre-Key using Identity Private Key
+    const signature = sodium.crypto_sign_detached(signedPreKeyPair.publicKey, identityKeyPair.privateKey);
+    const signatureBase64 = sodium.to_base64(signature, sodium.base64_variants.ORIGINAL);
+
+    // Generate One-Time Pre-Keys (X25519)
+    const oneTimePreKeys = [];
+    const oneTimePreKeysPrivate = [];
+    for (let i = 0; i < 100; i++) {
+        const kp = sodium.crypto_box_keypair();
+        oneTimePreKeys.push({
+            key_id: i,
+            public_key: sodium.to_base64(kp.publicKey, sodium.base64_variants.ORIGINAL)
+        });
+        oneTimePreKeysPrivate.push({
+            key_id: i,
+            private_key: sodium.to_base64(kp.privateKey, sodium.base64_variants.ORIGINAL)
+        });
+    }
+
+    const uploadPayload = {
+        identity_key: identityKeyPub,
+        signed_pre_key: {
+            key_id: 1,
+            public_key: signedPreKeyPub,
+            signature: signatureBase64
+        },
+        one_time_pre_keys: oneTimePreKeys
+    };
+
+    const privateData = {
+        identity_key_private: identityKeyPriv,
+        signed_pre_key_private: signedPreKeyPriv,
+        one_time_pre_keys_private: oneTimePreKeysPrivate
+    };
+
+    return { uploadPayload, privateData };
+}
+
 // Global Message Listener inside Worker
 if (typeof self !== 'undefined') {
     self.addEventListener('message', async (e: MessageEvent<WorkerRequest>) => {
@@ -157,6 +210,9 @@ if (typeof self !== 'undefined') {
                     break
                 case 'DECRYPT_FILE':
                     response.result = await handleDecryptFile(req.payload.encryptedBlob, req.payload.fileKey)
+                    break
+                case 'GEN_KEYS':
+                    response.result = await handleGenerateKeys()
                     break
                 default:
                     throw new Error('Unknown action')

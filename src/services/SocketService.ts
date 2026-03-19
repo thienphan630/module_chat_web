@@ -131,9 +131,47 @@ class SocketService {
             case 'system':
                 console.log('System message:', payload.data);
                 break;
+            case 'room_member_joined':
+                console.log(`[SocketService] User ${payload.data?.user_id} joined room ${payload.room_id}`);
+                this.handleMemberJoined(payload.room_id!, payload.data?.user_id);
+                break;
+            case 'room_member_left':
+                console.log(`[SocketService] User ${payload.data?.user_id} left room ${payload.room_id}`);
+                this.handleMemberLeft(payload.room_id!, payload.data?.user_id);
+                break;
             default:
                 break;
         }
+    }
+
+    private async handleMemberJoined(roomId: string, newUserId: string) {
+        if (!roomId || !newUserId) return;
+        
+        console.log(`[E2EE] Fetching public keys for new member ${newUserId} in room ${roomId}`);
+        
+        try {
+            // Fetch keys for the new user in bulk (even if it's 1 user, the API is array-based)
+            const response = await api.fetchKeys({ user_ids: [newUserId] });
+            const userBundle = response.keys[newUserId];
+
+            if (userBundle) {
+                console.log(`[E2EE] Got keys for ${newUserId}, generating new Sender Key and sending via Olm...`);
+                // TODO: Generate new symmetric Sender Key for the room.
+                // TODO: Encrypt Sender Key with newUserId's public keys via Double Ratchet / Olm.
+                // TODO: Send via POST /api/v1/messages or Ephemeral WS indicating new E2EE setup.
+            }
+        } catch (err) {
+            console.error('[E2EE] Failed to handle member joined:', err);
+        }
+    }
+
+    private handleMemberLeft(roomId: string, leftUserId: string) {
+        if (!roomId || !leftUserId) return;
+
+        console.log(`[E2EE] Member ${leftUserId} left room ${roomId}. Rotating Sender Key...`);
+        // TODO: Generate new Sender Key (so the left member cannot read future messages)
+        // TODO: Fetch keys for ALL remaining members in the room 
+        // TODO: Encrypt new Sender Key and distribute to remaining members via Olm.
     }
 
     private handleError(payload: WS_Payload) {

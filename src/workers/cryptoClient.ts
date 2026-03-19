@@ -1,5 +1,6 @@
 import CryptoWorker from './crypto.worker?worker'
 import { v4 as uuidv4 } from 'uuid'
+import type { UploadKeysPayload } from '../types/chat.types'
 import type {
     WorkerRequest,
     WorkerResponse,
@@ -39,6 +40,8 @@ function dispatch<T>(action: CryptoAction, payload?: any, key?: string): Promise
 
 export const CryptoClient = {
     genUUID: () => dispatch<string>('GEN_UUID'),
+
+    genKeys: () => dispatch<{ uploadPayload: UploadKeysPayload, privateData: any }>('GEN_KEYS'),
 
     encryptText: (plaintext: string, roomKey: string) =>
         dispatch<string>('ENCRYPT_TEXT', plaintext, roomKey),

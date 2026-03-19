@@ -1,6 +1,7 @@
 import type {
     RegisterPayload, LoginPayload, AuthResponse,
-    Room, RoomMember, CreateRoomPayload, InviteMembersPayload
+    Room, RoomMember, CreateRoomPayload, InviteMembersPayload,
+    UploadKeysPayload, FetchKeysPayload, FetchKeysResponse, ChatMessage
 } from '../types/chat.types'
 import { apiClient } from './axios-instance'
 
@@ -67,6 +68,17 @@ export const api = {
         return response.json()
     },
 
+    // --- E2EE Key Management ---
+
+    async uploadKeys(payload: UploadKeysPayload): Promise<void> {
+        await apiClient.post('/api/v1/e2ee/keys', payload)
+    },
+
+    async fetchKeys(payload: FetchKeysPayload): Promise<FetchKeysResponse> {
+        const { data } = await apiClient.post('/api/v1/e2ee/keys/fetch', payload)
+        return data
+    },
+
     // --- Room Management (REST API with auth) ---
 
     async createRoom(payload: CreateRoomPayload): Promise<{ room: Room; members: string[] }> {
@@ -110,6 +122,15 @@ export const api = {
         };
     },
 
+    async getHistoricalMessages(roomId: string, beforeMsgId: string, limit: number = 50): Promise<{ messages: ChatMessage[] }> {
+        const { data } = await apiClient.get(`/api/v1/rooms/${roomId}/messages`, {
+            params: {
+                before_msg_id: beforeMsgId,
+                limit
+            }
+        });
+        return data;
+    },
     async uploadFile(_blob: Blob): Promise<string> {
         await sleep(1500);
         return 'https://mock-s3.url/' + crypto.randomUUID();

@@ -3,7 +3,8 @@ export type CryptoAction =
     | 'ENCRYPT_TEXT'
     | 'DECRYPT_TEXT'
     | 'ENCRYPT_FILE'
-    | 'DECRYPT_FILE';
+    | 'DECRYPT_FILE'
+    | 'GEN_KEYS';
 
 export interface BaseWorkerRequest {
     id: string; // tracking task
@@ -39,12 +40,17 @@ export interface DecryptFileRequest extends BaseWorkerRequest {
     };
 }
 
+export interface GenKeysRequest extends BaseWorkerRequest {
+    action: 'GEN_KEYS';
+}
+
 export type WorkerRequest =
     | GenUUIDRequest
     | EncryptTextRequest
     | DecryptTextRequest
     | EncryptFileRequest
-    | DecryptFileRequest;
+    | DecryptFileRequest
+    | GenKeysRequest;
 
 export interface WorkerResponse {
     id: string;

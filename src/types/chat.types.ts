@@ -17,8 +17,7 @@ export interface RoomKey {
     created_at: number
 }
 
-export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system';
-
+export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left';
 export interface WS_Payload {
     type: WS_Event_Type;
     token?: string;
@@ -92,4 +91,41 @@ export const WS_ERROR_CODES = {
 } as const
 
 export type WsErrorCode = typeof WS_ERROR_CODES[keyof typeof WS_ERROR_CODES]
+
+// --- E2EE Key Management Types ---
+
+export interface UploadKeysPayload {
+    identity_key: string;
+    signed_pre_key: {
+        key_id: number;
+        public_key: string;
+        signature: string;
+    };
+    one_time_pre_keys: Array<{
+        key_id: number;
+        public_key: string;
+    }>;
+}
+
+export interface FetchKeysPayload {
+    user_ids: string[];
+}
+
+export interface UserPreKeyBundle {
+    user_id: string;
+    identity_key: string;
+    signed_pre_key: {
+        key_id: number;
+        public_key: string;
+        signature: string;
+    };
+    one_time_pre_key?: {
+        key_id: number;
+        public_key: string;
+    };
+}
+
+export interface FetchKeysResponse {
+    keys: Record<string, UserPreKeyBundle>;
+}
 

@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import type { ChatMessage } from '../types/chat.types'
+import { CryptoClient } from '../workers/cryptoClient'
+import { getE2EEKeys, saveE2EEKeys } from '../utils/db'
+import { api } from '../lib/api'
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 
@@ -31,6 +34,9 @@ interface ChatState {
     enqueueMessage: (message: ChatMessage) => void
     dequeueMessage: (messageId: string) => void
     clearQueue: () => void
+
+    // Initialization routine for post-login
+    initializeE2EEKeys: () => Promise<void>
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -76,6 +82,29 @@ export const useChatStore = create<ChatState>((set) => ({
         sendQueue: state.sendQueue.filter(m => m.message_id !== messageId)
     })),
 
-    clearQueue: () => set({ sendQueue: [] })
+    clearQueue: () => set({ sendQueue: [] }),
+
+    initializeE2EEKeys: async () => {
+        const state = useChatStore.getState();
+        if (!state.currentUserId || state.currentUserId === 'default-user') return;
+
+        const existingKeys = await getE2EEKeys(state.currentUserId);
+        if (!existingKeys) {
+            console.log('[E2EE] Generating Keys for new session...');
+            const { uploadPayload, privateData } = await CryptoClient.genKeys();
+            
+            await saveE2EEKeys({
+                userId: state.currentUserId,
+                identity_key_private: privateData.identity_key_private,
+                signed_pre_key_private: privateData.signed_pre_key_private,
+                one_time_pre_keys_private: privateData.one_time_pre_keys_private
+            });
+
+            await api.uploadKeys(uploadPayload);
+            console.log('[E2EE] Keys generated and uploaded successfully.');
+        } else {
+            console.log('[E2EE] Keys already exist for user.');
+        }
+    }
 }))
 

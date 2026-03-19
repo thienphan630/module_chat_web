@@ -1,15 +1,24 @@
 import Dexie, { type Table } from 'dexie'
 import type { ChatMessage, RoomKey, MessageStatus } from '@/types/chat.types'
 
+export interface E2EEKeyBundle {
+    userId: string;
+    identity_key_private: string;
+    signed_pre_key_private: string;
+    one_time_pre_keys_private: any[];
+}
+
 export class CoreChatDatabase extends Dexie {
     messages!: Table<ChatMessage, string>
     roomKeys!: Table<RoomKey, string>
+    e2eeKeys!: Table<E2EEKeyBundle, string>
 
     constructor() {
         super('CoreChatDB')
         this.version(1).stores({
             messages: 'message_id, [room_id+server_ts], status',
             roomKeys: 'room_id',
+            e2eeKeys: 'userId',
         })
     }
 }
@@ -66,6 +75,14 @@ export async function getRoomKey(roomId: string) {
  */
 export async function saveRoomKey(roomId: string, shared_key: string) {
     return await db.roomKeys.put({ room_id: roomId, shared_key, created_at: Date.now() })
+}
+
+export async function getE2EEKeys(userId: string) {
+    return await db.e2eeKeys.get(userId)
+}
+
+export async function saveE2EEKeys(bundle: E2EEKeyBundle) {
+    return await db.e2eeKeys.put(bundle)
 }
 
 /**

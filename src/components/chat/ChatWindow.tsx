@@ -3,8 +3,10 @@ import { db } from '../../utils/db'
 import { GapMarker } from './GapMarker'
 import { MessageBubble } from './MessageBubble'
 import { InputArea } from './InputArea'
-import { ShieldAlert } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { ShieldAlert, Loader2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { api } from '../../lib/api'
+import { insertMessages } from '../../utils/db'
 
 export const ChatWindow = ({ roomId }: { roomId: string }) => {
     const bottomRef = useRef<HTMLDivElement>(null)
@@ -14,6 +16,36 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         [roomId],
         []
     )
+
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+    const [hasReachedStart, setHasReachedStart] = useState(false)
+
+    // Reset pagination state when changing room
+    useEffect(() => {
+        setHasReachedStart(false)
+    }, [roomId])
+
+    const loadHistory = async () => {
+        if (!messages || messages.length === 0) return;
+        setIsLoadingHistory(true);
+        try {
+            const oldestMsgId = messages[0].message_id;
+            const res = await api.getHistoricalMessages(roomId, oldestMsgId, 50);
+            
+            if (res.messages.length < 50) {
+                setHasReachedStart(true);
+            }
+            
+            if (res.messages.length > 0) {
+                // In a real flow, you decrypt `ciphertext` here via CryptoClient before inserting
+                await insertMessages(res.messages);
+            }
+        } catch (err) {
+            console.error("Failed to load history", err);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    }
 
     // Scroll to bottom mechanism 
     useEffect(() => {
@@ -47,7 +79,20 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                 {messages.length === 0 ? (
                     <div className="text-center text-zinc-500 italic mt-8">No messages yet. Send the first encrypted message!</div>
                 ) : (
-                    messages.map((msg, index) => {
+                    <>
+                        {!hasReachedStart && (
+                            <div className="flex justify-center mb-4">
+                                <button 
+                                    onClick={loadHistory}
+                                    disabled={isLoadingHistory}
+                                    className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm hover:bg-zinc-700 transition disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {isLoadingHistory ? <Loader2 size={16} className="animate-spin" /> : null}
+                                    {isLoadingHistory ? 'Loading history...' : 'Load older messages'}
+                                </button>
+                            </div>
+                        )}
+                        {messages.map((msg, index) => {
                         const prevMsg = messages[index - 1]
 
                         // Fake Gap logic: if diff is > 2000 ms, render a Gap. 
@@ -67,7 +112,8 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                                 <MessageBubble data={msg} />
                             </div>
                         )
-                    })
+                    })}
+                    </>
                 )}
                 <div ref={bottomRef} className="h-1" />
             </div>

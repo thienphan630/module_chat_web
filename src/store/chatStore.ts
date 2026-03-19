@@ -22,6 +22,11 @@ interface ChatState {
     refreshToken: string | null
     isAuthenticated: boolean
 
+    // Ephemeral UX state (not persisted — lost on refresh)
+    typingUsers: Record<string, string[]>              // roomId → [userId, ...]
+    presenceMap: Record<string, 'online' | 'offline'>  // userId → status
+    readReceipts: Record<string, string[]>             // messageId → [readerId, ...]
+
     setConnectionStatus: (status: ConnectionStatus) => void
     setCurrentUserId: (id: string) => void
     setCurrentRoomId: (roomId: string | null) => void
@@ -34,6 +39,11 @@ interface ChatState {
     enqueueMessage: (message: ChatMessage) => void
     dequeueMessage: (messageId: string) => void
     clearQueue: () => void
+
+    // Ephemeral UX actions
+    setTyping: (roomId: string, userId: string, isTyping: boolean) => void
+    setPresence: (userId: string, status: 'online' | 'offline') => void
+    markMessageRead: (messageId: string, readerId: string) => void
 
     // Initialization routine for post-login
     initializeE2EEKeys: () => Promise<void>
@@ -49,6 +59,11 @@ export const useChatStore = create<ChatState>((set) => ({
     accessToken: localStorage.getItem('accessToken'),
     refreshToken: localStorage.getItem('refreshToken'),
     isAuthenticated: !!localStorage.getItem('accessToken'),
+
+    // Ephemeral UX state
+    typingUsers: {},
+    presenceMap: {},
+    readReceipts: {},
 
     setConnectionStatus: (status) => set({ connectionStatus: status }),
     setCurrentUserId: (id) => set({ currentUserId: id }),
@@ -83,6 +98,34 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
 
     clearQueue: () => set({ sendQueue: [] }),
+
+    // Ephemeral UX actions
+    setTyping: (roomId, userId, isTyping) => set(state => {
+        const current = state.typingUsers[roomId] || []
+        return {
+            typingUsers: {
+                ...state.typingUsers,
+                [roomId]: isTyping
+                    ? [...new Set([...current, userId])]
+                    : current.filter(id => id !== userId)
+            }
+        }
+    }),
+
+    setPresence: (userId, status) => set(state => ({
+        presenceMap: { ...state.presenceMap, [userId]: status }
+    })),
+
+    markMessageRead: (messageId, readerId) => set(state => {
+        const current = state.readReceipts[messageId] || []
+        if (current.includes(readerId)) return state
+        return {
+            readReceipts: {
+                ...state.readReceipts,
+                [messageId]: [...current, readerId]
+            }
+        }
+    }),
 
     initializeE2EEKeys: async () => {
         const state = useChatStore.getState();

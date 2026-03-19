@@ -20,6 +20,16 @@ export class CoreChatDatabase extends Dexie {
             roomKeys: 'room_id',
             e2eeKeys: 'userId',
         })
+        // Phase 05: Add is_deleted index
+        this.version(2).stores({
+            messages: 'message_id, [room_id+server_ts], status, is_deleted',
+            roomKeys: 'room_id',
+            e2eeKeys: 'userId',
+        }).upgrade(tx => {
+            return tx.table('messages').toCollection().modify(msg => {
+                if (msg.is_deleted === undefined) msg.is_deleted = false
+            })
+        })
     }
 }
 
@@ -125,4 +135,15 @@ export async function detectGap(roomId: string, newServerMessageBatch: ChatMessa
     // A simple gap formula is oldestInBatch.server_ts > newestLocalMsg.server_ts without contiguous verification.
     const gapExists = oldestInBatch.server_ts > newestLocalMsg.server_ts
     return gapExists
+}
+
+/**
+ * Mark a message as deleted (tombstone) — clears text/ciphertext
+ */
+export async function markDeleted(messageId: string) {
+    return await db.messages.update(messageId, {
+        is_deleted: true,
+        text: undefined,
+        ciphertext: undefined
+    })
 }

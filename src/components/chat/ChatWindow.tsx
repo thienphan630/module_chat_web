@@ -3,56 +3,97 @@ import { db } from '../../utils/db'
 import { GapMarker } from './GapMarker'
 import { MessageBubble } from './MessageBubble'
 import { InputArea } from './InputArea'
-import { ShieldAlert, Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { TypingIndicator } from './TypingIndicator'
+import { RoomDetailPanel } from '../room/RoomDetailPanel'
+import { Avatar } from '../ui/Avatar'
+import { MessageSkeleton } from '../ui/Skeleton'
+import { ShieldAlert, Info, ChevronDown } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { insertMessages } from '../../utils/db'
+import { isRoomKeyMessage } from '../../services/e2ee-key-manager'
+import { socketService } from '../../services/SocketService'
+import { useChatStore } from '../../store/chatStore'
 
 export const ChatWindow = ({ roomId }: { roomId: string }) => {
     const bottomRef = useRef<HTMLDivElement>(null)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    const messages = useLiveQuery(
+    const allMessages = useLiveQuery(
         () => db.messages.where('[room_id+server_ts]').between([roomId, 0], [roomId, Number.MAX_SAFE_INTEGER]).sortBy('server_ts'),
         [roomId],
         []
     )
 
+    const messages = useMemo(
+        () => allMessages.filter(msg => !isRoomKeyMessage(msg.aad_data)),
+        [allMessages]
+    )
+
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [hasReachedStart, setHasReachedStart] = useState(false)
+    const [showDetail, setShowDetail] = useState(false)
+    const [showScrollFab, setShowScrollFab] = useState(false)
 
-    // Reset pagination state when changing room
+    const { data: roomDetail } = useQuery({
+        queryKey: ['room-detail', roomId],
+        queryFn: () => api.getRoomDetail(roomId),
+    })
+    const roomName = roomDetail?.room?.name || roomId
+    const memberCount = roomDetail?.members?.length || 0
+
     useEffect(() => {
         setHasReachedStart(false)
+        setShowDetail(false)
     }, [roomId])
 
     const loadHistory = async () => {
-        if (!messages || messages.length === 0) return;
-        setIsLoadingHistory(true);
+        if (!messages || messages.length === 0) return
+        setIsLoadingHistory(true)
         try {
-            const oldestMsgId = messages[0].message_id;
-            const res = await api.getHistoricalMessages(roomId, oldestMsgId, 50);
-            
-            if (res.messages.length < 50) {
-                setHasReachedStart(true);
-            }
-            
-            if (res.messages.length > 0) {
-                // In a real flow, you decrypt `ciphertext` here via CryptoClient before inserting
-                await insertMessages(res.messages);
-            }
+            const oldestMsgId = messages[0].message_id
+            const res = await api.getHistoricalMessages(roomId, oldestMsgId, 50)
+            if (res.messages.length < 50) setHasReachedStart(true)
+            if (res.messages.length > 0) await insertMessages(res.messages)
         } catch (err) {
-            console.error("Failed to load history", err);
+            console.error('Failed to load history', err)
         } finally {
-            setIsLoadingHistory(false);
+            setIsLoadingHistory(false)
         }
     }
 
-    // Scroll to bottom mechanism 
+    // Scroll to bottom
+    const scrollToBottom = useCallback(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [])
+
+    useEffect(() => { scrollToBottom() }, [messages.length, scrollToBottom])
+
+    // Show/hide scroll-to-bottom FAB
+    const handleScroll = useCallback(() => {
+        const container = scrollContainerRef.current
+        if (!container) return
+        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        setShowScrollFab(distFromBottom > 200)
+    }, [])
+
+    // Read receipts
+    const currentUserId = useChatStore(s => s.currentUserId)
     useEffect(() => {
-        if (bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+        if (messages.length === 0) return
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg.sender_id !== currentUserId && lastMsg.status !== 'read') {
+            const timer = setTimeout(() => {
+                socketService.sendPayload({
+                    type: 'read',
+                    room_id: roomId,
+                    message_id: lastMsg.message_id,
+                })
+            }, 500)
+            return () => clearTimeout(timer)
         }
-    }, [messages.length])
+    }, [messages.length, roomId, currentUserId])
 
     if (!roomId) {
         return (
@@ -65,61 +106,117 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
     }
 
     return (
-        <div className="flex-1 flex flex-col bg-zinc-950">
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-950 sticky top-0 z-10">
-                <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold text-zinc-100">Room: {roomId}</h2>
-                    <span className="px-2 py-1 bg-zinc-800 text-emerald-400 text-xs rounded uppercase font-semibold flex items-center gap-1"><ShieldAlert size={12} /> E2EE secured</span>
-                </div>
-            </div>
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-                {messages.length === 0 ? (
-                    <div className="text-center text-zinc-500 italic mt-8">No messages yet. Send the first encrypted message!</div>
-                ) : (
-                    <>
-                        {!hasReachedStart && (
-                            <div className="flex justify-center mb-4">
-                                <button 
-                                    onClick={loadHistory}
-                                    disabled={isLoadingHistory}
-                                    className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm hover:bg-zinc-700 transition disabled:opacity-50 flex items-center gap-2"
-                                >
-                                    {isLoadingHistory ? <Loader2 size={16} className="animate-spin" /> : null}
-                                    {isLoadingHistory ? 'Loading history...' : 'Load older messages'}
-                                </button>
-                            </div>
-                        )}
-                        {messages.map((msg, index) => {
-                        const prevMsg = messages[index - 1]
-
-                        // Fake Gap logic: if diff is > 2000 ms, render a Gap. 
-                        // In reality, this detects if there is missing data between synced markers from DB.
-                        const timeDiff = prevMsg ? msg.server_ts - prevMsg.server_ts : 0
-                        const hasFakeGap = prevMsg && timeDiff > 1000 * 60 * 60 * 2 // a 2-hour gap simulating missing sync gap
-
-                        return (
-                            <div key={msg.message_id}>
-                                {hasFakeGap && (
-                                    <GapMarker
-                                        roomId={roomId}
-                                        fromTs={prevMsg!.server_ts}
-                                        toTs={msg.server_ts}
-                                    />
+        <div className="flex-1 flex bg-zinc-950">
+            <div className="flex-1 flex flex-col animate-fade-in">
+                {/* Header — glass */}
+                <div className="px-4 py-3 border-b border-zinc-800/50 flex justify-between items-center glass sticky top-0 z-10">
+                    <div className="flex items-center gap-3">
+                        <Avatar userId={roomId} name={roomName} size="md" />
+                        <div>
+                            <h2 className="text-base font-semibold text-zinc-100">{roomName}</h2>
+                            <div className="flex items-center gap-2">
+                                <span className="text-emerald-400 text-[10px] font-medium flex items-center gap-0.5">
+                                    <ShieldAlert size={10} /> E2EE
+                                </span>
+                                {memberCount > 0 && (
+                                    <span className="text-[10px] text-zinc-500">{memberCount} members</span>
                                 )}
-                                <MessageBubble data={msg} />
                             </div>
-                        )
-                    })}
-                    </>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setShowDetail(!showDetail)}
+                        title="Room Details"
+                        className={`p-2 rounded-xl transition-all active:scale-95 ${
+                            showDetail
+                                ? 'bg-emerald-600/20 text-emerald-400'
+                                : 'hover:bg-zinc-800/60 text-zinc-400'
+                        }`}
+                    >
+                        <Info size={18} />
+                    </button>
+                </div>
+
+                {/* Messages Area */}
+                <div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    className="flex-1 overflow-y-auto px-4 py-2 flex flex-col relative"
+                >
+                    {messages.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in">
+                            <div className="w-14 h-14 rounded-2xl bg-emerald-500/5 flex items-center justify-center mb-3">
+                                <ShieldAlert size={24} className="text-emerald-600" />
+                            </div>
+                            <p className="text-zinc-400 text-sm font-medium">No messages yet</p>
+                            <p className="text-xs text-zinc-600 mt-1">Send the first encrypted message!</p>
+                        </div>
+                    ) : (
+                        <>
+                            {!hasReachedStart && (
+                                <div className="flex justify-center mb-4">
+                                    {isLoadingHistory ? (
+                                        <div className="space-y-2 w-full">
+                                            <MessageSkeleton />
+                                            <MessageSkeleton />
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={loadHistory}
+                                            className="px-4 py-2 bg-zinc-800/50 text-zinc-400 rounded-xl text-xs hover:bg-zinc-800 transition-colors"
+                                        >
+                                            Load older messages
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            {messages.map((msg, index) => {
+                                const prevMsg = messages[index - 1]
+                                const timeDiff = prevMsg ? msg.server_ts - prevMsg.server_ts : 0
+                                const hasFakeGap = prevMsg && timeDiff > 1000 * 60 * 60 * 2
+
+                                return (
+                                    <div key={msg.message_id} className="animate-slide-up">
+                                        {hasFakeGap && (
+                                            <GapMarker
+                                                roomId={roomId}
+                                                fromTs={prevMsg!.server_ts}
+                                                toTs={msg.server_ts}
+                                            />
+                                        )}
+                                        <MessageBubble data={msg} />
+                                    </div>
+                                )
+                            })}
+                        </>
+                    )}
+                    <div ref={bottomRef} className="h-1" />
+                </div>
+
+                {/* Scroll-to-bottom FAB */}
+                {showScrollFab && (
+                    <button
+                        onClick={scrollToBottom}
+                        className="absolute bottom-32 right-6 z-20 p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-full shadow-xl text-zinc-300 transition-all animate-slide-up border border-zinc-700/50"
+                    >
+                        <ChevronDown size={18} />
+                    </button>
                 )}
-                <div ref={bottomRef} className="h-1" />
+
+                <TypingIndicator roomId={roomId} />
+                <InputArea roomId={roomId} />
             </div>
 
-            {/* Input Form */}
-            <InputArea roomId={roomId} />
+            {/* Room Detail Side Panel */}
+            {showDetail && (
+                <div className="animate-slide-right">
+                    <RoomDetailPanel
+                        roomId={roomId}
+                        isOpen={showDetail}
+                        onClose={() => setShowDetail(false)}
+                    />
+                </div>
+            )}
         </div>
     )
 }

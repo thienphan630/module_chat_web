@@ -1,7 +1,8 @@
 import type {
     RegisterPayload, LoginPayload, AuthResponse,
     Room, RoomMember, CreateRoomPayload, InviteMembersPayload,
-    UploadKeysPayload, FetchKeysPayload, FetchKeysResponse, ChatMessage
+    UploadKeysPayload, FetchKeysPayload, FetchKeysResponse, ChatMessage,
+    UserSearchResult
 } from '../types/chat.types'
 import { apiClient } from './axios-instance'
 
@@ -102,6 +103,18 @@ export const api = {
 
     async removeMember(roomId: string, userId: string): Promise<void> {
         await apiClient.delete(`/api/v1/rooms/${roomId}/members/${userId}`)
+    },
+
+    // User search — fallback to exact user_id when BE endpoint missing
+    async searchUsers(query: string): Promise<UserSearchResult[]> {
+        if (!query.trim()) return []
+        try {
+            const { data } = await apiClient.get('/api/v1/users/search', { params: { q: query } })
+            return data.users
+        } catch {
+            // Fallback: treat query as exact user_id
+            return [{ user_id: query.trim(), username: query.trim(), email: '' }]
+        }
     },
 
     // --- Rooms (Mock fallback) & Messages ---

@@ -1,63 +1,114 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
 import { socketService } from '../../services/SocketService'
-import { LogOut } from 'lucide-react'
+import { LogOut, Plus, MessageSquarePlus } from 'lucide-react'
+import { CreateRoomModal } from '../room/CreateRoomModal'
+import { Avatar } from '../ui/Avatar'
+import { ConnectionBadge } from '../ui/ConnectionBadge'
+import { RoomSkeleton } from '../ui/Skeleton'
 
 export const RoomList = () => {
     const { currentRoomId, setCurrentRoomId } = useChatStore()
+    const [showCreateRoom, setShowCreateRoom] = useState(false)
 
     const { data: rooms, isLoading } = useQuery({
-        queryKey: ['rooms'],
-        queryFn: api.getRooms
+        queryKey: ['my-rooms'],
+        queryFn: api.getMyRooms,
     })
 
     const handleJoinRoom = (roomId: string) => {
         if (currentRoomId === roomId) return
-
         if (currentRoomId) {
             socketService.sendPayload({ type: 'leave', room_id: currentRoomId })
         }
-
         setCurrentRoomId(roomId)
         socketService.sendPayload({ type: 'join', room_id: roomId })
     }
 
+    const handleLogout = () => {
+        socketService.disconnect()
+        useChatStore.getState().clearAuth()
+    }
+
     return (
-        <div className="w-80 border-r border-zinc-800 bg-zinc-950 flex flex-col">
-            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-zinc-100">Messages</h2>
-                <button title="Logout" className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400">
-                    <LogOut size={18} />
-                </button>
+        <div className="w-80 border-r border-zinc-800/50 glass flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-800/50">
+                <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-lg font-semibold text-zinc-100">Messages</h2>
+                    <div className="flex items-center gap-0.5">
+                        <button
+                            onClick={() => setShowCreateRoom(true)}
+                            title="New Chat"
+                            className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-emerald-400 active:scale-95"
+                        >
+                            <Plus size={18} />
+                        </button>
+                        <button
+                            onClick={handleLogout}
+                            title="Logout"
+                            className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-red-400 active:scale-95"
+                        >
+                            <LogOut size={16} />
+                        </button>
+                    </div>
+                </div>
+                <ConnectionBadge />
             </div>
 
+            <CreateRoomModal isOpen={showCreateRoom} onClose={() => setShowCreateRoom(false)} />
+
+            {/* Room list */}
             <div className="flex-1 overflow-y-auto">
                 {isLoading ? (
-                    <div className="p-4 text-zinc-500 text-sm">Loading rooms...</div>
+                    <div className="space-y-1">
+                        <RoomSkeleton />
+                        <RoomSkeleton />
+                        <RoomSkeleton />
+                    </div>
+                ) : !rooms || rooms.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-center mt-16 px-6">
+                        <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
+                            <MessageSquarePlus size={24} className="text-zinc-600" />
+                        </div>
+                        <p className="text-zinc-400 text-sm font-medium">No conversations yet</p>
+                        <p className="text-xs mt-1.5 text-zinc-600">
+                            Tap <span className="text-emerald-400">+</span> to start an encrypted chat.
+                        </p>
+                    </div>
                 ) : (
-                    <ul className="divide-y divide-zinc-800/50">
-                        {rooms?.map(room => (
+                    <ul>
+                        {rooms.map((room, idx) => (
                             <li
                                 key={room.room_id}
                                 onClick={() => handleJoinRoom(room.room_id)}
-                                className={`cursor-pointer p-4 transition-colors hover:bg-zinc-900 ${currentRoomId === room.room_id ? 'bg-zinc-900/80 border-l-4 border-emerald-500' : 'border-l-4 border-transparent'}`}
+                                className={`cursor-pointer px-3 py-3 transition-all duration-150 animate-slide-up ${
+                                    currentRoomId === room.room_id
+                                        ? 'bg-emerald-500/5 border-l-3 border-emerald-500'
+                                        : 'border-l-3 border-transparent hover:bg-zinc-800/30'
+                                }`}
+                                style={{ animationDelay: `${idx * 30}ms` }}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-                                        {room.avatarUrl ? (
-                                            <img src={room.avatarUrl} alt={room.name} className="w-full h-full rounded-full object-cover" />
-                                        ) : (
-                                            <span className="text-zinc-400 font-medium">
-                                                {room.name.charAt(0).toUpperCase()}
-                                            </span>
-                                        )}
-                                    </div>
+                                    <Avatar userId={room.room_id} name={room.room_name} size="lg" />
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-baseline mb-1">
-                                            <h3 className="font-medium text-zinc-200 truncate pr-2">{room.name}</h3>
+                                        <div className="flex justify-between items-baseline mb-0.5">
+                                            <h3 className="font-medium text-zinc-200 truncate pr-2 text-sm">
+                                                {room.room_name || room.room_id}
+                                            </h3>
+                                            <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-md font-medium ${
+                                                room.room_type === 'direct'
+                                                    ? 'text-blue-400 bg-blue-500/10'
+                                                    : 'text-purple-400 bg-purple-500/10'
+                                            }`}>
+                                                {room.room_type === 'direct' ? 'DM' : 'Group'}
+                                            </span>
                                         </div>
-                                        <p className="text-sm text-zinc-500 truncate">{room.lastMessagePreview}</p>
+                                        <p className="text-xs text-zinc-500 truncate">
+                                            🔒 E2EE • {room.role}
+                                        </p>
                                     </div>
                                 </div>
                             </li>

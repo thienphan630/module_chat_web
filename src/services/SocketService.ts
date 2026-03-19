@@ -1,8 +1,11 @@
 import { useChatStore } from '../store/chatStore'
 import type { WS_Payload, ChatMessage } from '../types/chat.types'
 import { WS_ERROR_CODES } from '../types/chat.types'
-import { addMessage, updateMessageStatus } from '../utils/db'
+import { addMessage, updateMessageStatus, getRoomKey, markDeleted } from '../utils/db'
 import { api } from '../lib/api'
+import { CryptoClient } from '../workers/cryptoClient'
+import { isRoomKeyMessage, parseRoomKeyAAD, handleIncomingRoomKey, distributeRoomKey } from './e2ee-key-manager'
+import { showBrowserNotification } from '../utils/notification'
 
 const AUTH_TIMEOUT_MS = 3000 // Server expects auth within 3 seconds
 
@@ -94,7 +97,7 @@ class SocketService {
         }
     }
 
-    private handleMessage(payload: WS_Payload) {
+    private async handleMessage(payload: WS_Payload) {
         if (payload.type === 'error') {
             this.handleError(payload);
             return;
@@ -110,21 +113,76 @@ class SocketService {
                 break;
             case 'message':
                 if (payload.room_id && payload.message_id && payload.data) {
-                    // Note: In real app, payload.data is Ciphertext that needs to be decrypted by Web Worker.
-                    // For now we add it to state directly. 
+                    // Phase 02: Check if this is a room key distribution message
+                    if (isRoomKeyMessage(payload.data.aad_data)) {
+                        const aad = parseRoomKeyAAD(payload.data.aad_data);
+                        if (aad && payload.data.ciphertext) {
+                            await handleIncomingRoomKey(
+                                payload.room_id,
+                                payload.data.sender_id || 'unknown',
+                                payload.data.ciphertext,
+                                aad
+                            );
+                        }
+                        // Do NOT render room key messages as chat messages
+                        break;
+                    }
+
+                    // Normal message: decrypt ciphertext using room key from DB
+                    let decryptedText: string | undefined;
+
+                    if (payload.data.ciphertext) {
+                        try {
+                            const roomKey = await getRoomKey(payload.room_id);
+                            if (roomKey) {
+                                decryptedText = await CryptoClient.decryptText(
+                                    payload.data.ciphertext,
+                                    roomKey.shared_key
+                                );
+                            } else {
+                                decryptedText = '[E2EE key not found]';
+                                console.warn(`[E2EE] No room key for ${payload.room_id} — cannot decrypt`);
+                            }
+                        } catch (err) {
+                            console.error('[E2EE] Decryption failed:', err);
+                            decryptedText = '[Decryption failed]';
+                        }
+                    }
+
+                    // Phase 05: Check if this is a delete tombstone
+                    if (payload.data.aad_data) {
+                        try {
+                            const aad = JSON.parse(payload.data.aad_data);
+                            if (aad.type === 'm.room.message.delete' && decryptedText) {
+                                const parsed = JSON.parse(decryptedText);
+                                if (parsed.target_id) {
+                                    await markDeleted(parsed.target_id);
+                                    break; // Don't render tombstone as a normal message
+                                }
+                            }
+                        } catch {
+                            // Not a tombstone — continue normal flow
+                        }
+                    }
+
                     addMessage({
                         message_id: payload.message_id,
                         room_id: payload.room_id,
                         sender_id: payload.data.sender_id || 'unknown',
                         server_ts: payload.server_ts || Date.now(),
                         ciphertext: payload.data.ciphertext,
+                        text: decryptedText,
+                        aad_data: payload.data.aad_data,
                         status: 'sent'
                     });
 
-                    // Trigger notification logic if room isn't current room
+                    // Browser notification for messages in non-active rooms
                     if (chatStore.currentRoomId !== payload.room_id) {
-                        // TODO: trigger Push Notification
-                        console.log(`New message in room ${payload.room_id}`);
+                        showBrowserNotification(
+                            `New message in ${payload.room_id}`,
+                            decryptedText?.slice(0, 100) || 'Encrypted message',
+                            payload.room_id
+                        )
                     }
                 }
                 break;
@@ -139,6 +197,39 @@ class SocketService {
                 console.log(`[SocketService] User ${payload.data?.user_id} left room ${payload.room_id}`);
                 this.handleMemberLeft(payload.room_id!, payload.data?.user_id);
                 break;
+
+            // Phase 04: Ephemeral UX events
+            case 'typing':
+                if (payload.room_id && payload.data?.sender_id) {
+                    chatStore.setTyping(payload.room_id, payload.data.sender_id, true)
+                    // Auto-clear after 4s if typing_stop never arrives
+                    setTimeout(() => {
+                        useChatStore.getState().setTyping(payload.room_id!, payload.data.sender_id, false)
+                    }, 4000)
+                }
+                break;
+            case 'typing_stop':
+                if (payload.room_id && payload.data?.sender_id) {
+                    chatStore.setTyping(payload.room_id, payload.data.sender_id, false)
+                }
+                break;
+            case 'user_online':
+                if (payload.data?.user_id) {
+                    chatStore.setPresence(payload.data.user_id, 'online')
+                }
+                break;
+            case 'user_offline':
+                if (payload.data?.user_id) {
+                    chatStore.setPresence(payload.data.user_id, 'offline')
+                }
+                break;
+            case 'read':
+                if (payload.data?.message_id && payload.data?.reader_id) {
+                    chatStore.markMessageRead(payload.data.message_id, payload.data.reader_id)
+                    updateMessageStatus(payload.data.message_id, 'read')
+                }
+                break;
+
             default:
                 break;
         }
@@ -146,32 +237,52 @@ class SocketService {
 
     private async handleMemberJoined(roomId: string, newUserId: string) {
         if (!roomId || !newUserId) return;
-        
-        console.log(`[E2EE] Fetching public keys for new member ${newUserId} in room ${roomId}`);
-        
-        try {
-            // Fetch keys for the new user in bulk (even if it's 1 user, the API is array-based)
-            const response = await api.fetchKeys({ user_ids: [newUserId] });
-            const userBundle = response.keys[newUserId];
 
-            if (userBundle) {
-                console.log(`[E2EE] Got keys for ${newUserId}, generating new Sender Key and sending via Olm...`);
-                // TODO: Generate new symmetric Sender Key for the room.
-                // TODO: Encrypt Sender Key with newUserId's public keys via Double Ratchet / Olm.
-                // TODO: Send via POST /api/v1/messages or Ephemeral WS indicating new E2EE setup.
-            }
+        const currentUserId = useChatStore.getState().currentUserId;
+        if (newUserId === currentUserId) return; // We joined — key comes from existing member
+
+        // Check if we have a room key to distribute
+        const roomKey = await getRoomKey(roomId);
+        if (!roomKey) {
+            console.log(`[E2EE] No room key for ${roomId} — cannot distribute to new member`);
+            return;
+        }
+
+        console.log(`[E2EE] Distributing room key to new member ${newUserId} in room ${roomId}`);
+        try {
+            await distributeRoomKey(roomId, [newUserId]);
         } catch (err) {
-            console.error('[E2EE] Failed to handle member joined:', err);
+            console.error('[E2EE] Failed to distribute key to new member:', err);
         }
     }
 
-    private handleMemberLeft(roomId: string, leftUserId: string) {
+    private async handleMemberLeft(roomId: string, leftUserId: string) {
         if (!roomId || !leftUserId) return;
 
-        console.log(`[E2EE] Member ${leftUserId} left room ${roomId}. Rotating Sender Key...`);
-        // TODO: Generate new Sender Key (so the left member cannot read future messages)
-        // TODO: Fetch keys for ALL remaining members in the room 
-        // TODO: Encrypt new Sender Key and distribute to remaining members via Olm.
+        const currentUserId = useChatStore.getState().currentUserId;
+        if (leftUserId === currentUserId) return; // We left — nothing to rotate
+
+        // Check if we have a room key (only existing members can rotate)
+        const roomKey = await getRoomKey(roomId);
+        if (!roomKey) return;
+
+        console.log(`[E2EE] Member ${leftUserId} left room ${roomId}. Rotating room key...`);
+
+        try {
+            // Fetch remaining members
+            const detail = await api.getRoomDetail(roomId);
+            const remainingMemberIds = detail.members
+                .map(m => m.room_id) // member's user_id field — depends on API shape
+                .filter(id => id !== leftUserId && id !== currentUserId);
+
+            // Generate new key + distribute to remaining members
+            if (remainingMemberIds.length > 0) {
+                await distributeRoomKey(roomId, remainingMemberIds);
+            }
+            console.log(`[E2EE] Room key rotated for ${roomId}`);
+        } catch (err) {
+            console.error('[E2EE] Failed to rotate key after member left:', err);
+        }
     }
 
     private handleError(payload: WS_Payload) {

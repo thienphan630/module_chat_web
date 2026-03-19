@@ -4,7 +4,9 @@ export type CryptoAction =
     | 'DECRYPT_TEXT'
     | 'ENCRYPT_FILE'
     | 'DECRYPT_FILE'
-    | 'GEN_KEYS';
+    | 'GEN_KEYS'
+    | 'WRAP_ROOM_KEY'
+    | 'UNWRAP_ROOM_KEY';
 
 export interface BaseWorkerRequest {
     id: string; // tracking task
@@ -44,13 +46,33 @@ export interface GenKeysRequest extends BaseWorkerRequest {
     action: 'GEN_KEYS';
 }
 
+export interface WrapRoomKeyRequest extends BaseWorkerRequest {
+    action: 'WRAP_ROOM_KEY';
+    payload: {
+        roomKey: string;          // Base64 AES-256 room key to wrap
+        theirSignedPreKeyPub: string; // Base64 X25519 public key of recipient
+        ourSignedPreKeyPriv: string;  // Base64 X25519 private key of sender
+    };
+}
+
+export interface UnwrapRoomKeyRequest extends BaseWorkerRequest {
+    action: 'UNWRAP_ROOM_KEY';
+    payload: {
+        wrappedKey: string;        // Base64 AES-GCM ciphertext
+        theirSignedPreKeyPub: string; // Base64 X25519 public key of sender
+        ourSignedPreKeyPriv: string;  // Base64 X25519 private key of recipient
+    };
+}
+
 export type WorkerRequest =
     | GenUUIDRequest
     | EncryptTextRequest
     | DecryptTextRequest
     | EncryptFileRequest
     | DecryptFileRequest
-    | GenKeysRequest;
+    | GenKeysRequest
+    | WrapRoomKeyRequest
+    | UnwrapRoomKeyRequest;
 
 export interface WorkerResponse {
     id: string;

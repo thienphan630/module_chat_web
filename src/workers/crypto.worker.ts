@@ -188,6 +188,55 @@ export async function handleGenerateKeys() {
     return { uploadPayload, privateData };
 }
 
+/**
+ * Wrap a room key for a specific recipient using X25519 ECDH.
+ * Uses signed_pre_key (X25519/crypto_box) for the ECDH exchange.
+ * Steps:
+ *   1. X25519 ECDH: ourPriv × theirPub → sharedSecret (32 bytes)
+ *   2. AES-GCM-encrypt(roomKey, sharedSecret) → wrappedKey
+ */
+async function handleWrapRoomKey(payload: {
+    roomKey: string;
+    theirSignedPreKeyPub: string;
+    ourSignedPreKeyPriv: string;
+}): Promise<string> {
+    await _sodium.ready;
+    const sodium = _sodium;
+
+    // Decode X25519 keys from base64
+    const theirPub = sodium.from_base64(payload.theirSignedPreKeyPub, sodium.base64_variants.ORIGINAL);
+    const ourPriv = sodium.from_base64(payload.ourSignedPreKeyPriv, sodium.base64_variants.ORIGINAL);
+
+    // X25519 ECDH → 32-byte shared secret
+    const sharedSecret = sodium.crypto_scalarmult(ourPriv, theirPub);
+
+    // Use shared secret as AES-GCM key to encrypt the room key
+    const sharedKeyBase64 = sodium.to_base64(sharedSecret, sodium.base64_variants.ORIGINAL);
+    return await handleEncryptText(payload.roomKey, sharedKeyBase64);
+}
+
+/**
+ * Unwrap a room key received from another user.
+ * Mirror of WRAP — derive same sharedSecret via ECDH, then AES-GCM-decrypt.
+ */
+async function handleUnwrapRoomKey(payload: {
+    wrappedKey: string;
+    theirSignedPreKeyPub: string;
+    ourSignedPreKeyPriv: string;
+}): Promise<string> {
+    await _sodium.ready;
+    const sodium = _sodium;
+
+    const theirPub = sodium.from_base64(payload.theirSignedPreKeyPub, sodium.base64_variants.ORIGINAL);
+    const ourPriv = sodium.from_base64(payload.ourSignedPreKeyPriv, sodium.base64_variants.ORIGINAL);
+
+    // Same X25519 ECDH → same shared secret
+    const sharedSecret = sodium.crypto_scalarmult(ourPriv, theirPub);
+
+    const sharedKeyBase64 = sodium.to_base64(sharedSecret, sodium.base64_variants.ORIGINAL);
+    return await handleDecryptText(payload.wrappedKey, sharedKeyBase64);
+}
+
 // Global Message Listener inside Worker
 if (typeof self !== 'undefined') {
     self.addEventListener('message', async (e: MessageEvent<WorkerRequest>) => {
@@ -213,6 +262,12 @@ if (typeof self !== 'undefined') {
                     break
                 case 'GEN_KEYS':
                     response.result = await handleGenerateKeys()
+                    break
+                case 'WRAP_ROOM_KEY':
+                    response.result = await handleWrapRoomKey(req.payload as any)
+                    break
+                case 'UNWRAP_ROOM_KEY':
+                    response.result = await handleUnwrapRoomKey(req.payload as any)
                     break
                 default:
                     throw new Error('Unknown action')

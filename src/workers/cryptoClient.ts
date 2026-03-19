@@ -54,4 +54,12 @@ export const CryptoClient = {
 
     decryptFile: (encryptedBlob: Blob, fileKeyStr: string) =>
         dispatch<Blob>('DECRYPT_FILE', { encryptedBlob, fileKey: fileKeyStr }),
+
+    /** Wrap a room key for a specific recipient using X25519 ECDH + AES-GCM */
+    wrapRoomKey: (roomKey: string, theirSignedPreKeyPub: string, ourSignedPreKeyPriv: string) =>
+        dispatch<string>('WRAP_ROOM_KEY', { roomKey, theirSignedPreKeyPub, ourSignedPreKeyPriv }),
+
+    /** Unwrap a room key from another user using X25519 ECDH + AES-GCM */
+    unwrapRoomKey: (wrappedKey: string, theirSignedPreKeyPub: string, ourSignedPreKeyPriv: string) =>
+        dispatch<string>('UNWRAP_ROOM_KEY', { wrappedKey, theirSignedPreKeyPub, ourSignedPreKeyPriv }),
 }

@@ -11,8 +11,9 @@ import { ShieldAlert, Info, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
-import { insertMessages } from '../../utils/db'
-import { isRoomKeyMessage } from '../../services/e2ee-key-manager'
+import { insertMessages, getRoomKey, markDeleted } from '../../utils/db'
+import { isRoomKeyMessage, parseRoomKeyAAD, handleIncomingRoomKey } from '../../services/e2ee-key-manager'
+import { CryptoClient } from '../../workers/cryptoClient'
 import { socketService } from '../../services/SocketService'
 import { useChatStore } from '../../store/chatStore'
 
@@ -49,19 +50,72 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
     }, [roomId])
 
     const loadHistory = async () => {
-        if (!messages || messages.length === 0) return
+        if (isLoadingHistory) return
         setIsLoadingHistory(true)
         try {
-            const oldestMsgId = messages[0].message_id
+            const oldestMsgId = messages && messages.length > 0 ? messages[0].message_id : undefined
             const res = await api.getHistoricalMessages(roomId, oldestMsgId, 50)
             if (res.messages.length < 50) setHasReachedStart(true)
-            if (res.messages.length > 0) await insertMessages(res.messages)
+            if (res.messages.length > 0) {
+                // Decrypt and process E2EE keys inside historical messages
+                for (const msg of res.messages) {
+                    if (isRoomKeyMessage(msg.aad_data)) {
+                        const aad = parseRoomKeyAAD(msg.aad_data || '');
+                        if (aad && msg.ciphertext) {
+                            await handleIncomingRoomKey(
+                                roomId,
+                                msg.sender_id || 'unknown',
+                                msg.ciphertext,
+                                aad
+                            );
+                        }
+                    } else if (msg.ciphertext && !msg.text) {
+                        try {
+                            const roomKey = await getRoomKey(roomId);
+                            if (roomKey) {
+                                msg.text = await CryptoClient.decryptText(
+                                    msg.ciphertext,
+                                    roomKey.shared_key
+                                );
+                            } else {
+                                msg.text = '[E2EE key not found]';
+                                console.warn(`[E2EE History] No room key for ${roomId} — cannot decrypt`);
+                            }
+                        } catch (err) {
+                            console.error('[E2EE History] Decryption failed:', err);
+                            msg.text = '[Decryption failed]';
+                        }
+                    }
+
+                    // Handle delete tombstones
+                    if (msg.aad_data && !isRoomKeyMessage(msg.aad_data)) {
+                        try {
+                            const aad = JSON.parse(msg.aad_data);
+                            if (aad.type === 'm.room.message.delete' && msg.text) {
+                                const parsed = JSON.parse(msg.text);
+                                if (parsed.target_id) {
+                                    await markDeleted(parsed.target_id);
+                                    msg.is_deleted = true;
+                                }
+                            }
+                        } catch {}
+                    }
+                }
+                await insertMessages(res.messages);
+            }
         } catch (err) {
             console.error('Failed to load history', err)
         } finally {
             setIsLoadingHistory(false)
         }
     }
+
+    // Auto-fetch if local DB is empty upon entering the room
+    useEffect(() => {
+        if (messages && messages.length === 0 && !hasReachedStart && !isLoadingHistory) {
+            loadHistory()
+        }
+    }, [roomId, messages, hasReachedStart, isLoadingHistory])
 
     // Scroll to bottom
     const scrollToBottom = useCallback(() => {

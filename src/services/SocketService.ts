@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { CryptoClient } from '../workers/cryptoClient'
 import { isRoomKeyMessage, parseRoomKeyAAD, handleIncomingRoomKey, distributeRoomKey } from './e2ee-key-manager'
 import { showBrowserNotification } from '../utils/notification'
+import { queryClient } from '../lib/queryClient'
 
 const AUTH_TIMEOUT_MS = 3000 // Server expects auth within 3 seconds
 
@@ -117,12 +118,16 @@ class SocketService {
                     if (isRoomKeyMessage(payload.data.aad_data)) {
                         const aad = parseRoomKeyAAD(payload.data.aad_data);
                         if (aad && payload.data.ciphertext) {
-                            await handleIncomingRoomKey(
+                            const success = await handleIncomingRoomKey(
                                 payload.room_id,
                                 payload.data.sender_id || 'unknown',
                                 payload.data.ciphertext,
                                 aad
                             );
+                            if (success) {
+                                // Refresh room list when new room key is received (usually means added to a new room)
+                                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                            }
                         }
                         // Do NOT render room key messages as chat messages
                         break;
@@ -192,10 +197,12 @@ class SocketService {
             case 'room_member_joined':
                 console.log(`[SocketService] User ${payload.data?.user_id} joined room ${payload.room_id}`);
                 this.handleMemberJoined(payload.room_id!, payload.data?.user_id);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
                 break;
             case 'room_member_left':
                 console.log(`[SocketService] User ${payload.data?.user_id} left room ${payload.room_id}`);
                 this.handleMemberLeft(payload.room_id!, payload.data?.user_id);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
                 break;
 
             // Phase 04: Ephemeral UX events
@@ -227,6 +234,38 @@ class SocketService {
                 if (payload.data?.message_id && payload.data?.reader_id) {
                     chatStore.markMessageRead(payload.data.message_id, payload.data.reader_id)
                     updateMessageStatus(payload.data.message_id, 'read')
+                }
+                break;
+
+            case 'room_added':
+                console.log(`[SocketService] User added to room ${payload.room?.room_id || payload.room_id}`);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.added_by) {
+                    showBrowserNotification('Bảng tin nhóm', 'Bạn vừa được thêm vào một nhóm mới', payload.room?.room_id || payload.room_id || '');
+                }
+                if (payload.room?.room_id) {
+                    this.sendPayload({ type: 'join', room_id: payload.room.room_id });
+                }
+                break;
+
+            case 'room_removed':
+                console.log(`[SocketService] User removed from room ${payload.room_id}`);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                
+                if (chatStore.currentRoomId === payload.room_id) {
+                    chatStore.setCurrentRoomId(null);
+                    showBrowserNotification('Thông báo nhóm', 'Bạn vừa bị quản trị viên mời ra khỏi nhóm', payload.room_id || '');
+                }
+                if (payload.room_id) {
+                    this.sendPayload({ type: 'leave', room_id: payload.room_id });
+                }
+                break;
+
+            case 'room_updated':
+                console.log(`[SocketService] Room ${payload.room_id} updated`);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.room_id) {
+                    queryClient.invalidateQueries({ queryKey: ['room', payload.room_id] });
                 }
                 break;
 

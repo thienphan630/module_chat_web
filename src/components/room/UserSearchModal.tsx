@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, UserPlus, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X, UserPlus, Loader2, Search } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { UserSearchResult } from '../../types/chat.types'
 
@@ -22,28 +22,78 @@ export const UserSearchModal = ({
     const [results, setResults] = useState<UserSearchResult[]>([])
     const [selected, setSelected] = useState<UserSearchResult[]>([])
     const [isSearching, setIsSearching] = useState(false)
+    const [searchError, setSearchError] = useState('')
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    if (!isOpen) return null
+    // Reset state when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setQuery('')
+            setResults([])
+            setSelected([])
+            setSearchError('')
+        }
+    }, [isOpen])
 
-    const handleSearch = async () => {
-        if (!query.trim()) return
+    // Debounced search — auto search after 300ms of typing
+    const executeSearch = useCallback(async (searchQuery: string) => {
+        const q = searchQuery.trim()
+        if (!q || q.length < 2) {
+            setResults([])
+            setSearchError('')
+            return
+        }
+
         setIsSearching(true)
+        setSearchError('')
         try {
-            const users = await api.searchUsers(query)
+            const users = await api.searchUsers(q)
             setResults(users)
         } catch (err) {
             console.error('Search failed:', err)
-            // Fallback: treat as user_id
-            setResults([{ user_id: query.trim(), username: query.trim(), email: '' }])
+            setResults([])
+            setSearchError('Không thể tìm kiếm. Vui lòng thử lại.')
         } finally {
             setIsSearching(false)
         }
-    }
+    }, [])
+
+    // Debounce effect — triggers search 300ms after typing stops
+    useEffect(() => {
+        if (searchTimerRef.current) {
+            clearTimeout(searchTimerRef.current)
+        }
+
+        const q = query.trim()
+        if (!q) {
+            setResults([])
+            setSearchError('')
+            return
+        }
+
+        if (q.length < 2) return
+
+        searchTimerRef.current = setTimeout(() => {
+            executeSearch(query)
+        }, 300)
+
+        return () => {
+            if (searchTimerRef.current) {
+                clearTimeout(searchTimerRef.current)
+            }
+        }
+    }, [query, executeSearch])
+
+    if (!isOpen) return null
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault()
-            handleSearch()
+            // Immediate search on Enter (bypass debounce)
+            if (searchTimerRef.current) {
+                clearTimeout(searchTimerRef.current)
+            }
+            executeSearch(query)
         }
     }
 
@@ -81,31 +131,47 @@ export const UserSearchModal = ({
                     </button>
                 </div>
 
-                {/* Search input */}
+                {/* Search input with inline spinner */}
                 <div className="flex gap-2 mb-4">
-                    <input
-                        type="text"
-                        value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Nhập tên hoặc ID..."
-                        className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-sm"
-                        autoFocus
-                    />
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Nhập tên hoặc email..."
+                            className="w-full px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-sm pr-10"
+                            autoFocus
+                        />
+                        {isSearching && (
+                            <Loader2 size={14} className="animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                        )}
+                    </div>
                     <button
-                        onClick={handleSearch}
-                        disabled={!query.trim() || isSearching}
+                        onClick={() => executeSearch(query)}
+                        disabled={!query.trim() || query.trim().length < 2 || isSearching}
                         className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium rounded-xl transition-colors"
                     >
-                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : 'Tìm'}
+                        <Search size={16} />
                     </button>
                 </div>
+
+                {/* Error message */}
+                {searchError && (
+                    <div className="mb-3 p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center">
+                        {searchError}
+                    </div>
+                )}
 
                 {/* Results */}
                 <div className="max-h-60 overflow-y-auto space-y-1 mb-4">
                     {results.length === 0 ? (
-                        <p className="text-zinc-500 text-sm text-center py-4">
-                            {query ? 'Không tìm thấy kết quả.' : 'Nhập ID hoặc tên để tìm.'}
+                        <p className="text-zinc-500 text-sm text-center py-8">
+                            {isSearching
+                                ? 'Đang tìm kiếm...'
+                                : query.trim().length >= 2
+                                    ? 'Không tìm thấy người dùng.'
+                                    : 'Nhập ít nhất 2 ký tự để tìm.'}
                         </p>
                     ) : (
                         results.map(user => {
@@ -127,7 +193,7 @@ export const UserSearchModal = ({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-zinc-200 truncate">{user.username}</p>
-                                        <p className="text-xs text-zinc-500 truncate">{user.user_id}</p>
+                                        <p className="text-xs text-zinc-500 truncate">{user.email || user.user_id}</p>
                                     </div>
                                     {multiSelect && isSelected && (
                                         <span className="text-emerald-400 text-xs font-medium">✓</span>
@@ -159,6 +225,7 @@ export const UserSearchModal = ({
                         <button
                             onClick={handleConfirm}
                             disabled={selected.length === 0}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium rounded-xl transition-colors"
                         >
                             Lưu ({selected.length}) người
                         </button>

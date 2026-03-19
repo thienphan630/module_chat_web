@@ -128,16 +128,10 @@ export const api = {
         await apiClient.delete(`/api/v1/rooms/${roomId}/members/${userId}`)
     },
 
-    // User search — fallback to exact user_id when BE endpoint missing
     async searchUsers(query: string): Promise<UserSearchResult[]> {
         if (!query.trim()) return []
-        try {
-            const { data } = await apiClient.get('/api/v1/users/search', { params: { q: query } })
-            return data.users
-        } catch {
-            // Fallback: treat query as exact user_id
-            return [{ user_id: query.trim(), username: query.trim(), email: '' }]
-        }
+        const { data } = await apiClient.get('/api/v1/users/search', { params: { q: query } })
+        return data
     },
 
     // --- Rooms (Mock fallback) & Messages ---
@@ -158,7 +152,7 @@ export const api = {
         };
     },
 
-    async getHistoricalMessages(roomId: string, beforeMsgId: string, limit: number = 50): Promise<{ messages: ChatMessage[] }> {
+    async getHistoricalMessages(roomId: string, beforeMsgId?: string, limit: number = 50): Promise<{ messages: ChatMessage[] }> {
         const { data } = await apiClient.get(`/api/v1/rooms/${roomId}/messages`, {
             params: {
                 before_msg_id: beforeMsgId,

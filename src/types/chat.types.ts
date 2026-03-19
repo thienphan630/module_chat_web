@@ -27,7 +27,7 @@ export interface RoomKey {
     created_at: number
 }
 
-export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left' | 'typing' | 'typing_stop' | 'user_online' | 'user_offline' | 'read';
+export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left' | 'typing' | 'typing_stop' | 'user_online' | 'user_offline' | 'read' | 'room_added' | 'room_removed' | 'room_updated';
 export interface WS_Payload {
     type: WS_Event_Type;
     token?: string;
@@ -36,6 +36,10 @@ export interface WS_Payload {
     server_ts?: number;
     code?: string;
     data?: any; // Ciphertext từ user khác khi nhận event message
+    room?: any; // Room payload for room_added
+    reason?: string; // Reason for room_removed
+    removed_by?: string; // Admin ID who removed
+    added_by?: string; // Admin ID who added
 }
 
 // --- Authentication Types ---

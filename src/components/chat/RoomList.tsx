@@ -16,6 +16,7 @@ export const RoomList = () => {
     const { data: rooms, isLoading } = useQuery({
         queryKey: ['my-rooms'],
         queryFn: api.getMyRooms,
+        refetchInterval: 10000, // Poll every 10s to discover new rooms since backend doesn't broadcast 'room_invited'
     })
 
     const handleJoinRoom = (roomId: string) => {

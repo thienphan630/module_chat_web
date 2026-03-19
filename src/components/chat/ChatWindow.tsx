@@ -99,8 +99,8 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         return (
             <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500">
                 <ShieldAlert size={48} className="mb-4 text-zinc-800" />
-                <h3 className="text-xl">Select a conversation</h3>
-                <p>E2EE Chats are secured and synced instantly.</p>
+                <h3 className="text-xl">Chọn một cuộc trò chuyện</h3>
+                <p>Nhắn tin an toàn qua mã hóa bảo mật.</p>
             </div>
         )
     }
@@ -116,17 +116,17 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                             <h2 className="text-base font-semibold text-zinc-100">{roomName}</h2>
                             <div className="flex items-center gap-2">
                                 <span className="text-emerald-400 text-[10px] font-medium flex items-center gap-0.5">
-                                    <ShieldAlert size={10} /> E2EE
+                                    <ShieldAlert size={10} /> Bảo mật
                                 </span>
                                 {memberCount > 0 && (
-                                    <span className="text-[10px] text-zinc-500">{memberCount} members</span>
+                                    <span className="text-[10px] text-zinc-500">{memberCount} thành viên</span>
                                 )}
                             </div>
                         </div>
                     </div>
                     <button
                         onClick={() => setShowDetail(!showDetail)}
-                        title="Room Details"
+                        title="Chi tiết Nhóm"
                         className={`p-2 rounded-xl transition-all active:scale-95 ${
                             showDetail
                                 ? 'bg-emerald-600/20 text-emerald-400'
@@ -148,8 +148,8 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                             <div className="w-14 h-14 rounded-2xl bg-emerald-500/5 flex items-center justify-center mb-3">
                                 <ShieldAlert size={24} className="text-emerald-600" />
                             </div>
-                            <p className="text-zinc-400 text-sm font-medium">No messages yet</p>
-                            <p className="text-xs text-zinc-600 mt-1">Send the first encrypted message!</p>
+                            <p className="text-zinc-400 text-sm font-medium">Chưa có tin nhắn</p>
+                            <p className="text-xs text-zinc-600 mt-1">Hãy gửi tin nhắn đầu tiên!</p>
                         </div>
                     ) : (
                         <>
@@ -165,7 +165,7 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                                             onClick={loadHistory}
                                             className="px-4 py-2 bg-zinc-800/50 text-zinc-400 rounded-xl text-xs hover:bg-zinc-800 transition-colors"
                                         >
-                                            Load older messages
+                                            Tải thêm tin nhắn cũ
                                         </button>
                                     )}
                                 </div>

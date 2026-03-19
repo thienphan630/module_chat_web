@@ -5,11 +5,11 @@ export const ConnectionBadge = () => {
     const status = useChatStore(s => s.connectionStatus)
 
     const config = {
-        connected:    { dot: 'bg-emerald-400', text: 'Encrypted', icon: ShieldCheck, pulse: false },
-        connecting:   { dot: 'bg-yellow-400', text: 'Connecting...', icon: Loader2, pulse: true },
-        reconnecting: { dot: 'bg-yellow-400', text: 'Reconnecting...', icon: Loader2, pulse: true },
-        error:        { dot: 'bg-red-400', text: 'Connection failed', icon: WifiOff, pulse: false },
-        disconnected: { dot: 'bg-zinc-600', text: 'Offline', icon: Wifi, pulse: false },
+        connected:    { dot: 'bg-emerald-400', text: 'Bảo mật', icon: ShieldCheck, pulse: false },
+        connecting:   { dot: 'bg-yellow-400', text: 'Đang kết nối...', icon: Loader2, pulse: true },
+        reconnecting: { dot: 'bg-yellow-400', text: 'Đang kết nối lại...', icon: Loader2, pulse: true },
+        error:        { dot: 'bg-red-400', text: 'Lỗi kết nối', icon: WifiOff, pulse: false },
+        disconnected: { dot: 'bg-zinc-600', text: 'Ngoại tuyến', icon: Wifi, pulse: false },
     }[status]
 
     const Icon = config.icon

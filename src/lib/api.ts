@@ -6,7 +6,15 @@ import type {
 } from '../types/chat.types'
 import { apiClient } from './axios-instance'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+
+/** Convert raw network errors to user-friendly messages */
+function handleNetworkError(err: unknown): never {
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        throw new Error('Unable to connect to server. Please check your connection and try again.')
+    }
+    throw err
+}
 
 export interface RoomMetaData {
     room_id: string;  // Aligned with V1 API spec (was 'id')
@@ -25,11 +33,16 @@ export const api = {
     // --- Authentication ---
 
     async register(payload: RegisterPayload): Promise<AuthResponse> {
-        const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        })
+        let response: Response
+        try {
+            response = await fetch(`${API_BASE}/api/v1/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+        } catch (err) {
+            handleNetworkError(err)
+        }
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ message: 'Registration failed' }))
@@ -40,11 +53,16 @@ export const api = {
     },
 
     async login(payload: LoginPayload): Promise<AuthResponse> {
-        const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        })
+        let response: Response
+        try {
+            response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+        } catch (err) {
+            handleNetworkError(err)
+        }
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ message: 'Login failed' }))
@@ -55,11 +73,16 @@ export const api = {
     },
 
     async refreshToken(refreshToken: string): Promise<AuthResponse> {
-        const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-        })
+        let response: Response
+        try {
+            response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken }),
+            })
+        } catch (err) {
+            handleNetworkError(err)
+        }
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ message: 'Token refresh failed' }))

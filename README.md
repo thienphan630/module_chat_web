@@ -22,6 +22,7 @@
 ### Tính năng chính
 
 - 🔒 **End-to-End Encryption** — Mã hóa ChaCha20-Poly1305 / AES-GCM qua Web Worker
+- 🇻🇳 **Giao diện Tiếng Việt** — Toàn bộ UI được Việt hóa ngôn từ ngắn gọn, dễ hiểu
 - ⚡ **Real-time Messaging** — WebSocket với auto-reconnect và exponential backoff
 - 📂 **Offline-first** — Lưu trữ cục bộ bằng IndexedDB (Dexie.js), hoạt động khi mất mạng
 - 🔄 **Optimistic UI** — Tin nhắn hiển thị ngay khi gửi, cập nhật trạng thái khi server xác nhận
@@ -146,7 +147,7 @@ Tạo file `.env` ở thư mục gốc project:
 
 ```env
 # URL của REST API backend
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=http://localhost:8080
 
 # URL của WebSocket Gateway
 VITE_WS_URL=ws://localhost:8080

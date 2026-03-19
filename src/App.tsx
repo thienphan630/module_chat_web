@@ -49,13 +49,13 @@ function App() {
             <div className="w-20 h-20 rounded-3xl bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-center mb-6">
               <ShieldAlert size={36} className="text-emerald-600/50" />
             </div>
-            <h1 className="text-2xl font-bold text-zinc-300 mb-2">Core Chat E2EE</h1>
+            <h1 className="text-2xl font-bold text-zinc-300 mb-2">Trò chuyện Bảo mật</h1>
             <p className="text-sm text-zinc-500 mb-6 max-w-xs text-center">
-              Select a conversation from the sidebar to start messaging securely.
+              Chọn một cuộc trò chuyện từ danh sách để bắt đầu nhắn tin an toàn.
             </p>
             <div className="flex items-center gap-1.5 text-xs text-zinc-600">
               <Lock size={12} />
-              <span>Messages encrypted with Signal Protocol</span>
+              <span>Tin nhắn được mã hóa giao thức Signal</span>
             </div>
           </div>
         )}

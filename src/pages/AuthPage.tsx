@@ -25,10 +25,10 @@ export const AuthPage = () => {
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4 animate-pulse-glow">
                         <ShieldAlert size={28} className="text-emerald-400" />
                     </div>
-                    <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Core Chat</h1>
+                    <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Trò chuyện Bảo mật</h1>
                     <div className="flex items-center justify-center gap-1.5 mt-2 text-zinc-500 text-sm">
                         <Lock size={12} />
-                        <span>End-to-End Encrypted. Always.</span>
+                        <span>Luôn mã hóa đầu cuối.</span>
                     </div>
                 </div>
 
@@ -47,7 +47,7 @@ export const AuthPage = () => {
                         Signal Protocol • X25519 ECDH • AES-GCM
                     </p>
                     <p className="text-zinc-700 text-[10px]">
-                        Messages are encrypted on your device before being sent.
+                        Tin nhắn được mã hóa ngay trên thiết bị của bạn.
                     </p>
                 </div>
             </div>

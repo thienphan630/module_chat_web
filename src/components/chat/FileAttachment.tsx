@@ -43,7 +43,7 @@ export const FileAttachment = ({ attachment, roomKeyBase64 }: FileAttachmentProp
                 }
             } catch (err) {
                 console.error('[FileAttachment] Decrypt failed:', err)
-                if (!revoked) setError('Failed to decrypt file')
+                if (!revoked) setError('Lỗi giải mã tệp')
             } finally {
                 if (!revoked) setIsLoading(false)
             }
@@ -60,7 +60,7 @@ export const FileAttachment = ({ attachment, roomKeyBase64 }: FileAttachmentProp
         return (
             <div className="flex items-center gap-2 p-3 bg-zinc-900/50 rounded-xl mt-1">
                 <Loader2 size={16} className="animate-spin text-zinc-400" />
-                <span className="text-xs text-zinc-500">Decrypting {attachment.file_name}...</span>
+                <span className="text-xs text-zinc-500">Đang giải mã {attachment.file_name}...</span>
             </div>
         )
     }

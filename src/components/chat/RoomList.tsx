@@ -37,18 +37,18 @@ export const RoomList = () => {
             {/* Header */}
             <div className="p-4 border-b border-zinc-800/50">
                 <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-lg font-semibold text-zinc-100">Messages</h2>
+                    <h2 className="text-lg font-semibold text-zinc-100">Trò chuyện</h2>
                     <div className="flex items-center gap-0.5">
                         <button
                             onClick={() => setShowCreateRoom(true)}
-                            title="New Chat"
+                            title="Tạo nhóm/chát"
                             className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-emerald-400 active:scale-95"
                         >
                             <Plus size={18} />
                         </button>
                         <button
                             onClick={handleLogout}
-                            title="Logout"
+                            title="Đăng xuất"
                             className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-red-400 active:scale-95"
                         >
                             <LogOut size={16} />
@@ -73,9 +73,9 @@ export const RoomList = () => {
                         <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
                             <MessageSquarePlus size={24} className="text-zinc-600" />
                         </div>
-                        <p className="text-zinc-400 text-sm font-medium">No conversations yet</p>
+                        <p className="text-zinc-400 text-sm font-medium">Chưa có trò chuyện</p>
                         <p className="text-xs mt-1.5 text-zinc-600">
-                            Tap <span className="text-emerald-400">+</span> to start an encrypted chat.
+                            Nhấn <span className="text-emerald-400">+</span> để bắt đầu nhắn tin.
                         </p>
                     </div>
                 ) : (
@@ -103,7 +103,7 @@ export const RoomList = () => {
                                                     ? 'text-blue-400 bg-blue-500/10'
                                                     : 'text-purple-400 bg-purple-500/10'
                                             }`}>
-                                                {room.room_type === 'direct' ? 'DM' : 'Group'}
+                                                {room.room_type === 'direct' ? 'Cá nhân' : 'Nhóm'}
                                             </span>
                                         </div>
                                         <p className="text-xs text-zinc-500 truncate">

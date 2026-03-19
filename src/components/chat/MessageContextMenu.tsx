@@ -50,14 +50,14 @@ export const MessageContextMenu = ({ isMe, messageText, onDelete, children }: Me
                         onClick={handleCopy}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors"
                     >
-                        <Copy size={14} /> Copy
+                        <Copy size={14} /> Sao chép
                     </button>
                     {isMe && (
                         <button
                             onClick={handleDelete}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
                         >
-                            <Trash2 size={14} /> Delete
+                            <Trash2 size={14} /> Xóa
                         </button>
                     )}
                 </div>

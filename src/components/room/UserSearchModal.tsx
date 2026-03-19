@@ -16,7 +16,7 @@ export const UserSearchModal = ({
     onClose,
     onSelect,
     multiSelect = false,
-    title = 'Find User'
+    title = 'Tìm Người Dùng'
 }: UserSearchModalProps) => {
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<UserSearchResult[]>([])
@@ -88,7 +88,7 @@ export const UserSearchModal = ({
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Enter user ID or username..."
+                        placeholder="Nhập tên hoặc ID..."
                         className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-sm"
                         autoFocus
                     />
@@ -97,7 +97,7 @@ export const UserSearchModal = ({
                         disabled={!query.trim() || isSearching}
                         className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium rounded-xl transition-colors"
                     >
-                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : 'Search'}
+                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : 'Tìm'}
                     </button>
                 </div>
 
@@ -105,7 +105,7 @@ export const UserSearchModal = ({
                 <div className="max-h-60 overflow-y-auto space-y-1 mb-4">
                     {results.length === 0 ? (
                         <p className="text-zinc-500 text-sm text-center py-4">
-                            {query ? 'No results. Try a user ID.' : 'Type a user ID or username to search.'}
+                            {query ? 'Không tìm thấy kết quả.' : 'Nhập ID hoặc tên để tìm.'}
                         </p>
                     ) : (
                         results.map(user => {
@@ -159,9 +159,8 @@ export const UserSearchModal = ({
                         <button
                             onClick={handleConfirm}
                             disabled={selected.length === 0}
-                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium rounded-xl transition-colors"
                         >
-                            Select {selected.length} user{selected.length !== 1 ? 's' : ''}
+                            Lưu ({selected.length}) người
                         </button>
                     </div>
                 )}

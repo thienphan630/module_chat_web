@@ -33,7 +33,7 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
             // Connect WebSocket with fresh token
             socketService.connect(data.access_token)
         } catch (err: any) {
-            setError(err.message || 'Login failed. Please check your credentials.')
+            setError(err.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại.')
         } finally {
             setIsLoading(false)
         }
@@ -45,8 +45,8 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 mb-4">
                     <ShieldCheck size={32} className="text-emerald-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-zinc-100">Welcome Back</h1>
-                <p className="text-zinc-500 text-sm mt-1">Sign in to your encrypted conversations</p>
+                <h1 className="text-2xl font-bold text-zinc-100">Chào mừng trở lại</h1>
+                <p className="text-zinc-500 text-sm mt-1">Đăng nhập để vào trò chuyện</p>
             </div>
 
             {error && (
@@ -60,7 +60,7 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="Email address"
+                    placeholder="Địa chỉ Email"
                     required
                     disabled={isLoading}
                     className="w-full px-4 py-3 bg-zinc-800/80 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition disabled:opacity-50"
@@ -69,7 +69,7 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Password"
+                    placeholder="Mật khẩu"
                     required
                     minLength={6}
                     disabled={isLoading}
@@ -83,17 +83,17 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
             >
                 {isLoading ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isLoading ? 'Signing in...' : 'Sign In'}
+                {isLoading ? 'Đang xử lý...' : 'Đăng nhập'}
             </button>
 
             <p className="text-center text-zinc-500 text-sm">
-                Don't have an account?{' '}
+                Chưa có tài khoản?{' '}
                 <button
                     type="button"
                     onClick={onSwitchToRegister}
                     className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
                 >
-                    Create one
+                    Tạo mới ngay
                 </button>
             </p>
         </form>

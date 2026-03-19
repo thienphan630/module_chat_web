@@ -76,7 +76,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                 <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
                     {/* Header */}
                     <div className="flex justify-between items-center mb-5">
-                        <h3 className="text-lg font-semibold text-zinc-100">New Conversation</h3>
+                        <h3 className="text-lg font-semibold text-zinc-100">Tạo mới</h3>
                         <button onClick={handleClose} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400">
                             <X size={18} />
                         </button>
@@ -93,7 +93,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                             }`}
                         >
                             <MessageSquare size={16} />
-                            Direct Message
+                            Tạo Chat cá nhân
                         </button>
                         <button
                             onClick={() => { setMode('group'); setSelectedUsers([]) }}
@@ -104,7 +104,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                             }`}
                         >
                             <Users size={16} />
-                            Group Chat
+                            Tạo Nhóm
                         </button>
                     </div>
 
@@ -114,7 +114,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                             type="text"
                             value={groupName}
                             onChange={e => setGroupName(e.target.value)}
-                            placeholder="Group name"
+                            placeholder="Tên nhóm"
                             className="w-full px-4 py-2.5 mb-4 bg-zinc-800 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-sm"
                         />
                     )}
@@ -122,7 +122,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                     {/* Selected users */}
                     {selectedUsers.length > 0 && (
                         <div className="mb-4">
-                            <p className="text-xs text-zinc-500 mb-2">Selected members:</p>
+                            <p className="text-xs text-zinc-500 mb-2">Thành viên đã chọn:</p>
                             <div className="flex flex-wrap gap-1">
                                 {selectedUsers.map(u => (
                                     <span
@@ -148,7 +148,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                         className="w-full py-2.5 mb-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
                     >
                         <Users size={16} />
-                        {selectedUsers.length > 0 ? 'Add more members' : 'Select members'}
+                        {selectedUsers.length > 0 ? 'Thêm thành viên' : 'Chọn người dùng'}
                     </button>
 
                     {error && (
@@ -168,7 +168,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
                     >
                         {isCreating ? <Loader2 size={16} className="animate-spin" /> : null}
-                        {isCreating ? 'Creating...' : `Create ${mode === 'dm' ? 'DM' : 'Group'}`}
+                        {isCreating ? 'Đang tạo...' : `Tạo ${mode === 'dm' ? 'Chat' : 'Nhóm'}`}
                     </button>
                 </div>
             </div>
@@ -185,7 +185,7 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                     })
                 }}
                 multiSelect={mode === 'group'}
-                title={mode === 'dm' ? 'Select User' : 'Add Members'}
+                title={mode === 'dm' ? 'Chọn Người Dùng' : 'Thêm Thành Viên'}
             />
         </>
     )

@@ -52,7 +52,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
     }
 
     const handleLeave = async () => {
-        if (!confirm('Leave this room? You will lose access to messages.')) return
+        if (!confirm('Rời khỏi nhóm này? Bạn sẽ mất quyền truy cập tin nhắn trong nhóm.')) return
         setIsLeaving(true)
         try {
             await api.removeMember(roomId, currentUserId)
@@ -71,7 +71,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
             <div className="w-80 border-l border-zinc-800 bg-zinc-950 flex flex-col h-full">
                 {/* Header */}
                 <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-zinc-100">Room Details</h3>
+                    <h3 className="text-lg font-semibold text-zinc-100">Thông tin</h3>
                     <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400">
                         <X size={18} />
                     </button>
@@ -93,10 +93,10 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                             <h4 className="text-center text-zinc-100 font-semibold text-lg">{room?.name || roomId}</h4>
                             <div className="flex items-center justify-center gap-2 mt-1">
                                 <span className="px-2 py-0.5 bg-zinc-800 text-emerald-400 text-xs rounded uppercase font-medium flex items-center gap-1">
-                                    <ShieldAlert size={10} /> E2EE
+                                    <ShieldAlert size={10} /> Bảo mật
                                 </span>
                                 <span className="text-xs text-zinc-500">
-                                    {room?.type === 'direct' ? 'Direct Message' : 'Group Chat'}
+                                    {room?.type === 'direct' ? 'Cá nhân' : 'Nhóm'}
                                 </span>
                             </div>
                         </div>
@@ -105,7 +105,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                         <div className="p-4">
                             <div className="flex justify-between items-center mb-3">
                                 <h5 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
-                                    Members ({members.length})
+                                    Thành viên ({members.length})
                                 </h5>
                                 {isAdmin && (
                                     <button
@@ -114,7 +114,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                                         className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-600/20 text-emerald-400 rounded-lg hover:bg-emerald-600/30 transition-colors"
                                     >
                                         <UserPlus size={12} />
-                                        Invite
+                                        Thêm người
                                     </button>
                                 )}
                             </div>
@@ -147,7 +147,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                         className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
                     >
                         {isLeaving ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                        {isLeaving ? 'Leaving...' : 'Leave Room'}
+                        {isLeaving ? 'Đang rời...' : 'Rời hợi thoại'}
                     </button>
                 </div>
             </div>
@@ -157,7 +157,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                 onClose={() => setShowInvite(false)}
                 onSelect={handleInvite}
                 multiSelect
-                title="Invite Members"
+                title="Mời Thành Viên"
             />
         </>
     )

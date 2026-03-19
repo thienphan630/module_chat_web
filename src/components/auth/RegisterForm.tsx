@@ -34,7 +34,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             // Connect WebSocket
             socketService.connect(data.access_token)
         } catch (err: any) {
-            setError(err.message || 'Registration failed. Please try again.')
+            setError(err.message || 'Đăng ký thất bại. Vui lòng thử lại.')
         } finally {
             setIsLoading(false)
         }
@@ -46,8 +46,8 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 mb-4">
                     <UserPlus size={32} className="text-emerald-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-zinc-100">Create Account</h1>
-                <p className="text-zinc-500 text-sm mt-1">Join secure, end-to-end encrypted messaging</p>
+                <h1 className="text-2xl font-bold text-zinc-100">Tạo tài khoản</h1>
+                <p className="text-zinc-500 text-sm mt-1">Tham gia cùng cộng đồng trò chuyện bảo mật</p>
             </div>
 
             {error && (
@@ -61,7 +61,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                     type="text"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
-                    placeholder="Username (3-30 characters)"
+                    placeholder="Tên đăng nhập (3-30 ký tự)"
                     required
                     minLength={3}
                     maxLength={30}
@@ -72,7 +72,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="Email address"
+                    placeholder="Địa chỉ Email"
                     required
                     disabled={isLoading}
                     className="w-full px-4 py-3 bg-zinc-800/80 text-zinc-100 rounded-xl border border-zinc-700/50 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition disabled:opacity-50"
@@ -81,7 +81,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                     type="password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Password (min 6 characters)"
+                    placeholder="Mật khẩu (ít nhất 6 ký tự)"
                     required
                     minLength={6}
                     disabled={isLoading}
@@ -95,17 +95,17 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
             >
                 {isLoading ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isLoading ? 'Creating account...' : 'Create Account'}
+                {isLoading ? 'Đang tạo...' : 'Tạo tài khoản'}
             </button>
 
             <p className="text-center text-zinc-500 text-sm">
-                Already have an account?{' '}
+                Đã có tài khoản?{' '}
                 <button
                     type="button"
                     onClick={onSwitchToLogin}
                     className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
                 >
-                    Sign in
+                    Đăng nhập
                 </button>
             </p>
         </form>

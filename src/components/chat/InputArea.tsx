@@ -127,7 +127,7 @@ export const InputArea = ({ roomId }: { roomId: string }) => {
                 value={text}
                 onChange={e => { setText(e.target.value); emitTyping() }}
                 onKeyDown={handleKeyDown}
-                placeholder="Type an E2EE message..."
+                placeholder="Nhập tin nhắn bảo mật..."
                 className="flex-1 bg-zinc-800 text-zinc-100 rounded-xl p-3 max-h-32 min-h-12 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                 rows={1}
             />

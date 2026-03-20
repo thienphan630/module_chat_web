@@ -27,7 +27,7 @@ export interface RoomKey {
     created_at: number
 }
 
-export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left' | 'typing' | 'typing_stop' | 'user_online' | 'user_offline' | 'read' | 'room_added' | 'room_removed' | 'room_updated';
+export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left' | 'typing' | 'typing_stop' | 'user_online' | 'user_offline' | 'read' | 'receipt' | 'room_added' | 'room_removed' | 'room_updated';
 export interface WS_Payload {
     type: WS_Event_Type;
     token?: string;
@@ -76,6 +76,7 @@ export interface Room {
     name: string
     type: RoomType
     created_by: string
+    member_count?: number
 }
 
 export interface RoomMember {
@@ -84,6 +85,26 @@ export interface RoomMember {
     room_type: RoomType
     role: MemberRole
     joined_at: string
+    user_id?: string
+    username?: string
+    email?: string
+}
+
+/** Member detail returned by GET /api/v1/rooms/:roomId/members (paginated) */
+export interface RoomMemberDetail {
+    user_id: string
+    username: string | null
+    email: string | null
+    avatar_url: string | null
+    role: MemberRole
+    joined_at: string
+}
+
+export interface RoomMembersResponse {
+    success: boolean
+    members: RoomMemberDetail[]
+    next_cursor: string | null
+    has_more: boolean
 }
 
 export interface CreateRoomPayload {

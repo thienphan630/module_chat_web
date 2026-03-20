@@ -12,7 +12,7 @@ import { v7 as uuidv7 } from 'uuid'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../utils/db'
 
-export const MessageBubble = ({ data }: { data: ChatMessage }) => {
+export const MessageBubble = ({ data, senderName }: { data: ChatMessage; senderName?: string }) => {
     const currentUserId = useChatStore((s) => s.currentUserId)
     const isMe = data.sender_id === currentUserId
 
@@ -87,7 +87,7 @@ export const MessageBubble = ({ data }: { data: ChatMessage }) => {
                 {/* Avatar for received messages */}
                 {!isMe && (
                     <div className="mr-2 mt-auto mb-1">
-                        <Avatar userId={data.sender_id} size="sm" />
+                        <Avatar userId={data.sender_id} name={senderName} size="sm" />
                     </div>
                 )}
 
@@ -97,7 +97,7 @@ export const MessageBubble = ({ data }: { data: ChatMessage }) => {
                         : 'bg-zinc-800/80 text-zinc-100 rounded-bl-sm border border-zinc-700/20'
                 }`}>
                     {!isMe && (
-                        <span className="text-[10px] font-semibold text-emerald-400/80 mb-0.5">{data.sender_id}</span>
+                        <span className="text-[10px] font-semibold text-emerald-400/80 mb-0.5">{senderName || data.sender_id}</span>
                     )}
 
                     {/* File attachment */}

@@ -2,7 +2,7 @@ import type {
     RegisterPayload, LoginPayload, AuthResponse,
     Room, RoomMember, CreateRoomPayload, InviteMembersPayload,
     UploadKeysPayload, FetchKeysPayload, FetchKeysResponse, ChatMessage,
-    UserSearchResult
+    UserSearchResult, RoomMembersResponse
 } from '../types/chat.types'
 import { apiClient } from './axios-instance'
 
@@ -103,8 +103,15 @@ export const api = {
         return data.rooms
     },
 
-    async getRoomDetail(roomId: string): Promise<{ room: Room; members: RoomMember[] }> {
+    async getRoomDetail(roomId: string): Promise<{ room: Room }> {
         const { data } = await apiClient.get(`/api/v1/rooms/${roomId}`)
+        return data
+    },
+
+    async fetchRoomMembers(roomId: string, limit = 50, cursor?: string): Promise<RoomMembersResponse> {
+        const params: Record<string, any> = { limit }
+        if (cursor) params.cursor = cursor
+        const { data } = await apiClient.get(`/api/v1/rooms/${roomId}/members`, { params })
         return data
     },
 
@@ -134,6 +141,13 @@ export const api = {
         if (afterServerTs) params.after_server_ts = afterServerTs
         const { data } = await apiClient.get('/api/v1/messages/sync', { params })
         return data
+    },
+
+    // --- Read Receipts ---
+
+    /** Mark message as read. Fire-and-forget — receipt is non-critical for UX. */
+    async sendReceipt(roomId: string, messageId: string): Promise<void> {
+        await apiClient.post(`/api/v1/rooms/${roomId}/receipts`, { message_id: messageId })
     },
 
 

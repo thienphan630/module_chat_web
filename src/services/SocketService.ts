@@ -198,11 +198,13 @@ class SocketService {
                 console.log(`[SocketService] User ${payload.data?.user_id} joined room ${payload.room_id}`);
                 this.handleMemberJoined(payload.room_id!, payload.data?.user_id);
                 queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
                 break;
             case 'room_member_left':
                 console.log(`[SocketService] User ${payload.data?.user_id} left room ${payload.room_id}`);
                 this.handleMemberLeft(payload.room_id!, payload.data?.user_id);
                 queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
                 break;
 
             // Phase 04: Ephemeral UX events
@@ -230,10 +232,10 @@ class SocketService {
                     chatStore.setPresence(payload.data.user_id, 'offline')
                 }
                 break;
-            case 'read':
-                if (payload.data?.message_id && payload.data?.reader_id) {
-                    chatStore.markMessageRead(payload.data.message_id, payload.data.reader_id)
-                    updateMessageStatus(payload.data.message_id, 'read')
+            case 'receipt':
+                if (payload.message_id && payload.data?.user_id) {
+                    chatStore.markMessageRead(payload.message_id, payload.data.user_id)
+                    updateMessageStatus(payload.message_id, 'read')
                 }
                 break;
 
@@ -308,10 +310,10 @@ class SocketService {
         console.log(`[E2EE] Member ${leftUserId} left room ${roomId}. Rotating room key...`);
 
         try {
-            // Fetch remaining members
-            const detail = await api.getRoomDetail(roomId);
-            const remainingMemberIds = detail.members
-                .map(m => m.room_id) // member's user_id field — depends on API shape
+            // Fetch remaining members via paginated API
+            const membersRes = await api.fetchRoomMembers(roomId);
+            const remainingMemberIds = membersRes.members
+                .map(m => m.user_id)
                 .filter(id => id !== leftUserId && id !== currentUserId);
 
             // Generate new key + distribute to remaining members

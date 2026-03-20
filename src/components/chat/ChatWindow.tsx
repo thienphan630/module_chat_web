@@ -14,7 +14,7 @@ import { api } from '../../lib/api'
 import { insertMessages } from '../../utils/db'
 import { isRoomKeyMessage } from '../../services/e2ee-key-manager'
 import { decryptAndProcessMessages } from '../../utils/decrypt-messages'
-import { socketService } from '../../services/SocketService'
+
 import { useChatStore } from '../../store/chatStore'
 import type { ChatMessage } from '../../types/chat.types'
 
@@ -43,7 +43,26 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         queryFn: () => api.getRoomDetail(roomId),
     })
     const roomName = roomDetail?.room?.name || roomId
-    const memberCount = roomDetail?.members?.length || 0
+    const memberCount = roomDetail?.room?.member_count || 0
+
+    // Fetch members via dedicated paginated API
+    const { data: membersData } = useQuery({
+        queryKey: ['room-members', roomId],
+        queryFn: () => api.fetchRoomMembers(roomId),
+    })
+
+    // Build sender_id → username lookup map from room members
+    const memberNameMap = useMemo(() => {
+        const map: Record<string, string> = {}
+        if (membersData?.members) {
+            for (const m of membersData.members) {
+                if (m.user_id && m.username) {
+                    map[m.user_id] = m.username
+                }
+            }
+        }
+        return map
+    }, [membersData?.members])
 
     useEffect(() => {
         setHasReachedStart(false)
@@ -116,17 +135,15 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         setShowScrollFab(distFromBottom > 200)
     }, [])
 
-    // Read receipts
+    // Read receipts — send via REST (BE rate-limits 2s/user/room, fail-open)
     const currentUserId = useChatStore(s => s.currentUserId)
     useEffect(() => {
         if (messages.length === 0) return
         const lastMsg = messages[messages.length - 1]
         if (lastMsg.sender_id !== currentUserId && lastMsg.status !== 'read') {
             const timer = setTimeout(() => {
-                socketService.sendPayload({
-                    type: 'read',
-                    room_id: roomId,
-                    message_id: lastMsg.message_id,
+                api.sendReceipt(roomId, lastMsg.message_id).catch(() => {
+                    // Silent fail — read receipts are non-critical
                 })
             }, 500)
             return () => clearTimeout(timer)
@@ -222,7 +239,7 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                                                 toTs={msg.server_ts}
                                             />
                                         )}
-                                        <MessageBubble data={msg} />
+                                        <MessageBubble data={msg} senderName={memberNameMap[msg.sender_id]} />
                                     </div>
                                 )
                             })}

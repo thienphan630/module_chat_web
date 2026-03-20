@@ -19,17 +19,25 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
     const currentUserId = useChatStore(s => s.currentUserId)
     const queryClient = useQueryClient()
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading: isRoomLoading } = useQuery({
         queryKey: ['room-detail', roomId],
         queryFn: () => api.getRoomDetail(roomId),
         enabled: isOpen,
     })
 
+    const { data: membersData, isLoading: isMembersLoading } = useQuery({
+        queryKey: ['room-members', roomId],
+        queryFn: () => api.fetchRoomMembers(roomId),
+        enabled: isOpen,
+    })
+
+    const isLoading = isRoomLoading || isMembersLoading
+
     if (!isOpen) return null
 
     const room = data?.room
-    const members = data?.members || []
-    const myMembership = members.find(m => m.room_id === roomId) // Depends on API shape
+    const members = membersData?.members || []
+    const myMembership = members.find(m => m.user_id === currentUserId)
     const isAdmin = myMembership?.role === 'admin'
 
     const handleInvite = async (users: { user_id: string }[]) => {
@@ -41,8 +49,8 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
             // E2EE: distribute room key to newly invited members
             await distributeRoomKey(roomId, userIds)
 
-            // Refresh detail
-            await queryClient.invalidateQueries({ queryKey: ['room-detail', roomId] })
+            // Refresh members list
+            await queryClient.invalidateQueries({ queryKey: ['room-members', roomId] })
         } catch (err) {
             console.error('Invite failed:', err)
         } finally {
@@ -129,7 +137,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                                             }
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm text-zinc-200 truncate">{member.room_name || member.room_id}</p>
+                                            <p className="text-sm text-zinc-200 truncate">{member.username || member.user_id}</p>
                                             <p className="text-xs text-zinc-500">{member.role}</p>
                                         </div>
                                     </li>
@@ -147,7 +155,7 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                         className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
                     >
                         {isLeaving ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                        {isLeaving ? 'Đang rời...' : 'Rời hợi thoại'}
+                        {isLeaving ? 'Đang rời...' : 'Rời hội thoại'}
                     </button>
                 </div>
             </div>

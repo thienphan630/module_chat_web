@@ -9,6 +9,7 @@ interface UserSearchModalProps {
     onSelect: (users: UserSearchResult[]) => void
     multiSelect?: boolean
     title?: string
+    excludeUserIds?: string[]
 }
 
 export const UserSearchModal = ({
@@ -16,7 +17,8 @@ export const UserSearchModal = ({
     onClose,
     onSelect,
     multiSelect = false,
-    title = 'Tìm Người Dùng'
+    title = 'Tìm Người Dùng',
+    excludeUserIds = []
 }: UserSearchModalProps) => {
     const [query, setQuery] = useState('')
     const [results, setResults] = useState<UserSearchResult[]>([])
@@ -48,7 +50,10 @@ export const UserSearchModal = ({
         setSearchError('')
         try {
             const users = await api.searchUsers(q)
-            setResults(users)
+            const filtered = excludeUserIds.length
+                ? users.filter(u => !excludeUserIds.includes(u.user_id))
+                : users
+            setResults(filtered)
         } catch (err) {
             console.error('Search failed:', err)
             setResults([])
@@ -56,7 +61,7 @@ export const UserSearchModal = ({
         } finally {
             setIsSearching(false)
         }
-    }, [])
+    }, [excludeUserIds])
 
     // Debounce effect — triggers search 300ms after typing stops
     useEffect(() => {

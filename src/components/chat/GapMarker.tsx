@@ -1,38 +1,72 @@
-import { useEffect, useRef } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
-import { LoaderCircle } from 'lucide-react'
+import { insertMessages } from '../../utils/db'
+import { decryptAndProcessMessages } from '../../utils/decrypt-messages'
+import { LoaderCircle, AlertCircle } from 'lucide-react'
+import type { ChatMessage } from '../../types/chat.types'
 
-export const GapMarker = ({ roomId, fromTs, toTs }: { roomId: string, fromTs: number, toTs: number }) => {
+export const GapMarker = ({ roomId, fromTs }: { roomId: string, fromTs: number, toTs: number }) => {
     const markerRef = useRef<HTMLDivElement>(null)
-    const queryClient = useQueryClient()
+    const [isLoading, setIsLoading] = useState(false)
+    const [error, setError] = useState(false)
+    const hasFetched = useRef(false)
 
+    const fetchGapMessages = useCallback(async () => {
+        if (isLoading || hasFetched.current) return
+        setIsLoading(true)
+        setError(false)
+        try {
+            const res = await api.syncMessages(roomId, fromTs, 50)
+            const msgs: ChatMessage[] = res.data || []
+
+            if (msgs.length > 0) {
+                await decryptAndProcessMessages(roomId, msgs)
+                await insertMessages(msgs)
+            }
+
+            hasFetched.current = true
+            // useLiveQuery in ChatWindow picks up new messages automatically
+        } catch (err) {
+            console.error('[GapMarker] Failed to fetch gap messages:', err)
+            setError(true)
+        } finally {
+            setIsLoading(false)
+        }
+    }, [roomId, fromTs, isLoading])
+
+    // IntersectionObserver — auto-fetch when visible
     useEffect(() => {
         const observer = new IntersectionObserver(
             ([entry]) => {
-                if (entry.isIntersecting) {
-                    console.log(`Gap detected! Firing sync between ${fromTs} -> ${toTs}`)
-
-                    // Actually handle sync API call here...
-                    api.syncMessages(roomId, fromTs).then(() => {
-                        queryClient.invalidateQueries({ queryKey: ['messages', roomId] })
-                    })
+                if (entry.isIntersecting && !hasFetched.current) {
+                    fetchGapMessages()
                 }
             },
-            { threshold: 0 }
+            { threshold: 0.1 }
         )
-
-        if (markerRef.current) {
-            observer.observe(markerRef.current)
-        }
-
+        if (markerRef.current) observer.observe(markerRef.current)
         return () => observer.disconnect()
-    }, [roomId, fromTs, toTs, queryClient])
+    }, [fetchGapMessages])
+
+    // Hide after successful fetch
+    if (hasFetched.current) return null
 
     return (
         <div ref={markerRef} className="py-4 my-2 flex justify-center items-center gap-2 border border-zinc-700/50 bg-zinc-800/20 rounded-lg text-zinc-400 text-sm italic">
-            <LoaderCircle size={14} className="animate-spin text-zinc-500" />
-            <span>Loading older messages...</span>
+            {isLoading ? (
+                <>
+                    <LoaderCircle size={14} className="animate-spin text-zinc-500" />
+                    <span>Đang tải tin nhắn...</span>
+                </>
+            ) : error ? (
+                <button onClick={fetchGapMessages} className="flex items-center gap-2 text-amber-400 hover:text-amber-300">
+                    <AlertCircle size={14} />
+                    <span>Tải lại tin nhắn</span>
+                </button>
+            ) : (
+                <span>Đang tải tin nhắn...</span>
+            )}
         </div>
     )
 }
+

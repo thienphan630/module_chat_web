@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
-import { socketService } from '../../services/SocketService'
 import { Plus, MessageSquarePlus } from 'lucide-react'
 import { CreateRoomModal } from '../room/CreateRoomModal'
 import { Avatar } from '../ui/Avatar'
@@ -20,13 +19,10 @@ export const RoomList = () => {
         refetchInterval: 10000, // Poll every 10s to discover new rooms since backend doesn't broadcast 'room_invited'
     })
 
+    // Only switch active room UI — auto-join (useAutoJoinRooms) keeps all rooms subscribed
     const handleJoinRoom = (roomId: string) => {
         if (currentRoomId === roomId) return
-        if (currentRoomId) {
-            socketService.sendPayload({ type: 'leave', room_id: currentRoomId })
-        }
         setCurrentRoomId(roomId)
-        socketService.sendPayload({ type: 'join', room_id: roomId })
     }
 
     return (

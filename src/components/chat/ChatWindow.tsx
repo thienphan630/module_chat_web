@@ -11,11 +11,12 @@ import { ShieldAlert, Info, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
-import { insertMessages, getRoomKey, markDeleted } from '../../utils/db'
-import { isRoomKeyMessage, parseRoomKeyAAD, handleIncomingRoomKey } from '../../services/e2ee-key-manager'
-import { CryptoClient } from '../../workers/cryptoClient'
+import { insertMessages } from '../../utils/db'
+import { isRoomKeyMessage } from '../../services/e2ee-key-manager'
+import { decryptAndProcessMessages } from '../../utils/decrypt-messages'
 import { socketService } from '../../services/SocketService'
 import { useChatStore } from '../../store/chatStore'
+import type { ChatMessage } from '../../types/chat.types'
 
 export const ChatWindow = ({ roomId }: { roomId: string }) => {
     const bottomRef = useRef<HTMLDivElement>(null)
@@ -32,7 +33,7 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         [allMessages]
     )
 
-    const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+    const [isSyncing, setIsSyncing] = useState(false)
     const [hasReachedStart, setHasReachedStart] = useState(false)
     const [showDetail, setShowDetail] = useState(false)
     const [showScrollFab, setShowScrollFab] = useState(false)
@@ -49,73 +50,56 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         setShowDetail(false)
     }, [roomId])
 
-    const loadHistory = async () => {
-        if (isLoadingHistory) return
-        setIsLoadingHistory(true)
+    // --- Sync messages from server (used for both initial load and incremental sync) ---
+    // Backend only supports GET /api/v1/messages/sync endpoint.
+    // - Without after_server_ts: returns latest N messages (initial load)
+    // - With after_server_ts: returns messages newer than that timestamp (incremental)
+    const syncMessages = async () => {
+        if (isSyncing) return
+        setIsSyncing(true)
         try {
-            const oldestMsgId = messages && messages.length > 0 ? messages[0].message_id : undefined
-            const res = await api.getHistoricalMessages(roomId, oldestMsgId, 50)
-            if (res.messages.length < 50) setHasReachedStart(true)
-            if (res.messages.length > 0) {
-                // Decrypt and process E2EE keys inside historical messages
-                for (const msg of res.messages) {
-                    if (isRoomKeyMessage(msg.aad_data)) {
-                        const aad = parseRoomKeyAAD(msg.aad_data || '');
-                        if (aad && msg.ciphertext) {
-                            await handleIncomingRoomKey(
-                                roomId,
-                                msg.sender_id || 'unknown',
-                                msg.ciphertext,
-                                aad
-                            );
-                        }
-                    } else if (msg.ciphertext && !msg.text) {
-                        try {
-                            const roomKey = await getRoomKey(roomId);
-                            if (roomKey) {
-                                msg.text = await CryptoClient.decryptText(
-                                    msg.ciphertext,
-                                    roomKey.shared_key
-                                );
-                            } else {
-                                msg.text = '[E2EE key not found]';
-                                console.warn(`[E2EE History] No room key for ${roomId} — cannot decrypt`);
-                            }
-                        } catch (err) {
-                            console.error('[E2EE History] Decryption failed:', err);
-                            msg.text = '[Decryption failed]';
-                        }
-                    }
+            const newestTs = messages && messages.length > 0
+                ? messages[messages.length - 1].server_ts
+                : undefined
 
-                    // Handle delete tombstones
-                    if (msg.aad_data && !isRoomKeyMessage(msg.aad_data)) {
-                        try {
-                            const aad = JSON.parse(msg.aad_data);
-                            if (aad.type === 'm.room.message.delete' && msg.text) {
-                                const parsed = JSON.parse(msg.text);
-                                if (parsed.target_id) {
-                                    await markDeleted(parsed.target_id);
-                                    msg.is_deleted = true;
-                                }
-                            }
-                        } catch {}
-                    }
-                }
-                await insertMessages(res.messages);
+            const res = await api.syncMessages(roomId, newestTs, 50)
+            const serverMsgs: ChatMessage[] = res.data || []
+
+            if (serverMsgs.length > 0) {
+                await decryptAndProcessMessages(roomId, serverMsgs)
+                await insertMessages(serverMsgs)
+            }
+
+            // If initial load returned fewer than 50, we've reached the start
+            if (!newestTs && serverMsgs.length < 50) {
+                setHasReachedStart(true)
             }
         } catch (err) {
-            console.error('Failed to load history', err)
+            console.error('[Sync] Failed to sync messages:', err)
         } finally {
-            setIsLoadingHistory(false)
+            setIsSyncing(false)
         }
     }
 
-    // Auto-fetch if local DB is empty upon entering the room
+    // --- Sync on room open: always fetch from server ---
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
-        if (messages && messages.length === 0 && !hasReachedStart && !isLoadingHistory) {
-            loadHistory()
+        if (isSyncing) return
+        syncMessages()
+    }, [roomId]) // Only trigger on room change — NOT on messages change
+
+    // --- Sync on WS reconnect (Phase 04) ---
+    const connectionStatus = useChatStore(s => s.connectionStatus)
+    const prevConnectionRef = useRef(connectionStatus)
+
+    useEffect(() => {
+        const prev = prevConnectionRef.current
+        prevConnectionRef.current = connectionStatus
+
+        if (prev !== 'connected' && connectionStatus === 'connected') {
+            syncMessages()
         }
-    }, [roomId, messages, hasReachedStart, isLoadingHistory])
+    }, [connectionStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Scroll to bottom
     const scrollToBottom = useCallback(() => {
@@ -209,14 +193,14 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                         <>
                             {!hasReachedStart && (
                                 <div className="flex justify-center mb-4">
-                                    {isLoadingHistory ? (
+                                    {isSyncing ? (
                                         <div className="space-y-2 w-full">
                                             <MessageSkeleton />
                                             <MessageSkeleton />
                                         </div>
                                     ) : (
                                         <button
-                                            onClick={loadHistory}
+                                            onClick={syncMessages}
                                             className="px-4 py-2 bg-zinc-800/50 text-zinc-400 rounded-xl text-xs hover:bg-zinc-800 transition-colors"
                                         >
                                             Tải thêm tin nhắn cũ

@@ -16,18 +16,6 @@ function handleNetworkError(err: unknown): never {
     throw err
 }
 
-export interface RoomMetaData {
-    room_id: string;  // Aligned with V1 API spec (was 'id')
-    name: string;
-    avatarUrl?: string;
-    lastMessagePreview?: string;
-    updatedAt: number;
-}
-
-// Mocked fetch logic since server is not implemented in full
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 export const api = {
     // --- Authentication ---
@@ -134,35 +122,25 @@ export const api = {
         return data
     },
 
-    // --- Rooms (Mock fallback) & Messages ---
+    // --- Message Sync & History ---
 
-    async getRooms(): Promise<RoomMetaData[]> {
-        await sleep(500); // simulate network
-        return [
-            { room_id: 'room-1', name: 'General Chat', lastMessagePreview: 'Hello world!', updatedAt: Date.now() },
-            { room_id: 'room-2', name: 'Secret Encrypted Group', lastMessagePreview: '[Ciphertext]', updatedAt: Date.now() - 3600000 },
-        ];
+    /**
+     * Sync messages from server.
+     * - Without afterServerTs: returns latest N messages (initial load)
+     * - With afterServerTs: returns messages newer than timestamp (incremental sync)
+     */
+    async syncMessages(roomId: string, afterServerTs?: number, limit: number = 50): Promise<{ data: ChatMessage[] }> {
+        const params: Record<string, any> = { room_id: roomId, limit }
+        if (afterServerTs) params.after_server_ts = afterServerTs
+        const { data } = await apiClient.get('/api/v1/messages/sync', { params })
+        return data
     },
 
-    async syncMessages(roomId: string, afterServerTs: number) {
-        await sleep(1000); // simulate network delay
-        console.log(`[API Mock] Sync requested for room ${roomId} after ${afterServerTs}`);
-        return {
-            messages: [] // Simulate returning empty or fetched old messages
-        };
-    },
 
-    async getHistoricalMessages(roomId: string, beforeMsgId?: string, limit: number = 50): Promise<{ messages: ChatMessage[] }> {
-        const { data } = await apiClient.get(`/api/v1/rooms/${roomId}/messages`, {
-            params: {
-                before_msg_id: beforeMsgId,
-                limit
-            }
-        });
-        return data;
-    },
+
+
     async uploadFile(_blob: Blob): Promise<string> {
-        await sleep(1500);
+        await new Promise(r => setTimeout(r, 1500));
         return 'https://mock-s3.url/' + crypto.randomUUID();
     }
 }

@@ -6,6 +6,7 @@ import { AuthPage } from '@/pages/AuthPage'
 import { ToastContainer } from '@/components/ui/Toast'
 import { socketService } from '@/services/SocketService'
 import { requestNotificationPermission } from '@/utils/notification'
+import { useAutoJoinRooms } from '@/hooks/useAutoJoinRooms'
 import { ShieldAlert, Lock } from 'lucide-react'
 
 function App() {
@@ -13,6 +14,9 @@ function App() {
   const connectionStatus = useChatStore((state) => state.connectionStatus)
   const currentRoomId = useChatStore((state) => state.currentRoomId)
   const accessToken = useChatStore((state) => state.accessToken)
+
+  // Auto-join all rooms when WS connects (ensures messages arrive from all rooms)
+  useAutoJoinRooms()
 
   // Auto-connect WebSocket when authenticated
   useEffect(() => {

@@ -22,6 +22,10 @@ interface ChatState {
     refreshToken: string | null
     isAuthenticated: boolean
 
+    // User profile info (persisted to localStorage)
+    userEmail: string | null
+    userName: string | null
+
     // Ephemeral UX state (not persisted — lost on refresh)
     typingUsers: Record<string, string[]>              // roomId → [userId, ...]
     presenceMap: Record<string, 'online' | 'offline'>  // userId → status
@@ -33,6 +37,7 @@ interface ChatState {
 
     // Auth actions
     setTokens: (accessToken: string, refreshToken: string) => void
+    setUserProfile: (email: string, username?: string) => void
     clearAuth: () => void
 
     // Queue features
@@ -60,6 +65,10 @@ export const useChatStore = create<ChatState>((set) => ({
     refreshToken: localStorage.getItem('refreshToken'),
     isAuthenticated: !!localStorage.getItem('accessToken'),
 
+    // User profile info (restored from localStorage)
+    userEmail: localStorage.getItem('userEmail'),
+    userName: localStorage.getItem('userName'),
+
     // Ephemeral UX state
     typingUsers: {},
     presenceMap: {},
@@ -76,15 +85,25 @@ export const useChatStore = create<ChatState>((set) => ({
         set({ accessToken, refreshToken, isAuthenticated: true })
     },
 
+    setUserProfile: (email: string, username?: string) => {
+        localStorage.setItem('userEmail', email)
+        if (username) localStorage.setItem('userName', username)
+        set({ userEmail: email, userName: username || null })
+    },
+
     clearAuth: () => {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
         localStorage.removeItem('userId')
+        localStorage.removeItem('userEmail')
+        localStorage.removeItem('userName')
         set({
             accessToken: null,
             refreshToken: null,
             isAuthenticated: false,
             currentUserId: 'default-user',
+            userEmail: null,
+            userName: null,
         })
     },
 

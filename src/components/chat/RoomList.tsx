@@ -3,11 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
 import { socketService } from '../../services/SocketService'
-import { LogOut, Plus, MessageSquarePlus } from 'lucide-react'
+import { Plus, MessageSquarePlus } from 'lucide-react'
 import { CreateRoomModal } from '../room/CreateRoomModal'
 import { Avatar } from '../ui/Avatar'
 import { ConnectionBadge } from '../ui/ConnectionBadge'
 import { RoomSkeleton } from '../ui/Skeleton'
+import { UserProfileCard } from './UserProfileCard'
 
 export const RoomList = () => {
     const { currentRoomId, setCurrentRoomId } = useChatStore()
@@ -28,33 +29,19 @@ export const RoomList = () => {
         socketService.sendPayload({ type: 'join', room_id: roomId })
     }
 
-    const handleLogout = () => {
-        socketService.disconnect()
-        useChatStore.getState().clearAuth()
-    }
-
     return (
         <div className="w-80 border-r border-zinc-800/50 glass flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-zinc-800/50">
                 <div className="flex justify-between items-center mb-2">
                     <h2 className="text-lg font-semibold text-zinc-100">Trò chuyện</h2>
-                    <div className="flex items-center gap-0.5">
-                        <button
-                            onClick={() => setShowCreateRoom(true)}
-                            title="Tạo nhóm/chát"
-                            className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-emerald-400 active:scale-95"
-                        >
-                            <Plus size={18} />
-                        </button>
-                        <button
-                            onClick={handleLogout}
-                            title="Đăng xuất"
-                            className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-red-400 active:scale-95"
-                        >
-                            <LogOut size={16} />
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => setShowCreateRoom(true)}
+                        title="Tạo nhóm/chát"
+                        className="p-2 hover:bg-zinc-800/60 rounded-xl transition-all text-zinc-400 hover:text-emerald-400 active:scale-95"
+                    >
+                        <Plus size={18} />
+                    </button>
                 </div>
                 <ConnectionBadge />
             </div>
@@ -117,6 +104,9 @@ export const RoomList = () => {
                     </ul>
                 )}
             </div>
+
+            {/* User profile footer */}
+            <UserProfileCard />
         </div>
     )
 }

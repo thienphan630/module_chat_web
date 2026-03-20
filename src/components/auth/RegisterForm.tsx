@@ -26,6 +26,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             // Store tokens + user info
             useChatStore.getState().setTokens(data.access_token, data.refresh_token)
             useChatStore.getState().setCurrentUserId(data.user_id)
+            useChatStore.getState().setUserProfile(email, username)
             localStorage.setItem('userId', data.user_id)
 
             // Initialize E2EE keys (generate + upload on first registration)

@@ -1,34 +1,27 @@
 import Dexie, { type Table } from 'dexie'
-import type { ChatMessage, RoomKey, MessageStatus } from '@/types/chat.types'
-
-export interface E2EEKeyBundle {
-    userId: string;
-    identity_key_private: string;
-    signed_pre_key_private: string;
-    one_time_pre_keys_private: any[];
-}
+import type { ChatMessage, MessageStatus } from '@/types/chat.types'
 
 export class CoreChatDatabase extends Dexie {
     messages!: Table<ChatMessage, string>
-    roomKeys!: Table<RoomKey, string>
-    e2eeKeys!: Table<E2EEKeyBundle, string>
 
     constructor() {
         super('CoreChatDB')
+        // Version 1-2 existed for E2EE schema — now removed
         this.version(1).stores({
             messages: 'message_id, [room_id+server_ts], status',
             roomKeys: 'room_id',
             e2eeKeys: 'userId',
         })
-        // Phase 05: Add is_deleted index
         this.version(2).stores({
             messages: 'message_id, [room_id+server_ts], status, is_deleted',
             roomKeys: 'room_id',
             e2eeKeys: 'userId',
-        }).upgrade(tx => {
-            return tx.table('messages').toCollection().modify(msg => {
-                if (msg.is_deleted === undefined) msg.is_deleted = false
-            })
+        })
+        // Version 3: post-E2EE removal — drop roomKeys and e2eeKeys tables
+        this.version(3).stores({
+            messages: 'message_id, [room_id+server_ts], status, is_deleted',
+            roomKeys: null,
+            e2eeKeys: null,
         })
     }
 }
@@ -36,7 +29,7 @@ export class CoreChatDatabase extends Dexie {
 export const db = new CoreChatDatabase()
 
 /**
- * Fetch latest messages for a room, sorted by server_ts (oldest to newest in the limited set).
+ * Fetch latest messages for a room, sorted by server_ts (oldest to newest).
  */
 export async function getLatestMessages(roomId: string, limit: number = 50): Promise<ChatMessage[]> {
     const msgs = await db.messages
@@ -45,7 +38,7 @@ export async function getLatestMessages(roomId: string, limit: number = 50): Pro
         .reverse()
         .limit(limit)
         .toArray()
-    return msgs.reverse() // Return chronological order suitable for UI chat list
+    return msgs.reverse()
 }
 
 /**
@@ -63,7 +56,7 @@ export async function addMessage(message: ChatMessage) {
 }
 
 /**
- * Update message status specifically (e.g pending -> sent)
+ * Update message status (e.g pending -> sent)
  */
 export async function updateMessageStatus(messageId: string, status: MessageStatus, server_ts?: number) {
     const changes: Partial<ChatMessage> = { status }
@@ -74,25 +67,27 @@ export async function updateMessageStatus(messageId: string, status: MessageStat
 }
 
 /**
- * Get Room Shared Key
+ * Mark all messages in a room up to the given message as 'read'.
  */
-export async function getRoomKey(roomId: string) {
-    return await db.roomKeys.get(roomId)
-}
+export async function markMessagesReadUpTo(messageId: string) {
+    const targetMsg = await db.messages.get(messageId)
+    if (!targetMsg) return 0
 
-/**
- * Save Room Shared Key
- */
-export async function saveRoomKey(roomId: string, shared_key: string) {
-    return await db.roomKeys.put({ room_id: roomId, shared_key, created_at: Date.now() })
-}
+    const roomId = targetMsg.room_id
+    const ts = targetMsg.server_ts
 
-export async function getE2EEKeys(userId: string) {
-    return await db.e2eeKeys.get(userId)
-}
+    const staleMessages = await db.messages
+        .where('[room_id+server_ts]')
+        .between([roomId, 0], [roomId, ts], true, true)
+        .filter(msg => msg.status !== 'read')
+        .toArray()
 
-export async function saveE2EEKeys(bundle: E2EEKeyBundle) {
-    return await db.e2eeKeys.put(bundle)
+    if (staleMessages.length === 0) return 0
+
+    await db.messages.bulkPut(
+        staleMessages.map(msg => ({ ...msg, status: 'read' as MessageStatus }))
+    )
+    return staleMessages.length
 }
 
 /**
@@ -108,8 +103,6 @@ export async function clearRoom(roomId: string) {
 
 /**
  * Detect gap between local messages and incoming server batch.
- * Example: Returns true if there might be missing messages between
- * the newest local message and the oldest message in the fresh batch.
  */
 export async function detectGap(roomId: string, newServerMessageBatch: ChatMessage[]): Promise<boolean> {
     if (newServerMessageBatch.length === 0) return false
@@ -118,32 +111,23 @@ export async function detectGap(roomId: string, newServerMessageBatch: ChatMessa
         msg.server_ts < min.server_ts ? msg : min
         , newServerMessageBatch[0])
 
-    // Get newest single message locally
     const newestLocalMsg = await db.messages
         .where('[room_id+server_ts]')
         .between([roomId, 0], [roomId, Number.MAX_SAFE_INTEGER])
         .reverse()
         .first()
 
-    if (!newestLocalMsg) {
-        // No local message, so no 'gap' relative to local state, it's just fresh download.
-        return false
-    }
+    if (!newestLocalMsg) return false
 
-    // If newest local is strictly earlier than oldest server message AND the difference is non-trivial.
-    // Actually, if we use strict tracking, even 1ms delay implies we don't know if messages exist between them.
-    // A simple gap formula is oldestInBatch.server_ts > newestLocalMsg.server_ts without contiguous verification.
-    const gapExists = oldestInBatch.server_ts > newestLocalMsg.server_ts
-    return gapExists
+    return oldestInBatch.server_ts > newestLocalMsg.server_ts
 }
 
 /**
- * Mark a message as deleted (tombstone) — clears text/ciphertext
+ * Mark a message as deleted (tombstone) — clears content
  */
 export async function markDeleted(messageId: string) {
     return await db.messages.update(messageId, {
         is_deleted: true,
-        text: undefined,
-        ciphertext: undefined
+        content: '',
     })
 }

@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
-import { distributeRoomKey } from '../../services/e2ee-key-manager'
 import { UserSearchModal } from './UserSearchModal'
-import { X, ShieldAlert, UserPlus, LogOut, Loader2, Crown, User } from 'lucide-react'
+import { X, UserPlus, LogOut, Loader2, Crown, User } from 'lucide-react'
 
 interface RoomDetailPanelProps {
     roomId: string
@@ -45,11 +44,6 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
         try {
             const userIds = users.map(u => u.user_id)
             await api.inviteMembers(roomId, { user_ids: userIds })
-
-            // E2EE: distribute room key to newly invited members
-            await distributeRoomKey(roomId, userIds)
-
-            // Refresh members list
             await queryClient.invalidateQueries({ queryKey: ['room-members', roomId] })
         } catch (err) {
             console.error('Invite failed:', err)
@@ -100,9 +94,6 @@ export const RoomDetailPanel = ({ roomId, isOpen, onClose }: RoomDetailPanelProp
                             </div>
                             <h4 className="text-center text-zinc-100 font-semibold text-lg">{room?.name || roomId}</h4>
                             <div className="flex items-center justify-center gap-2 mt-1">
-                                <span className="px-2 py-0.5 bg-zinc-800 text-emerald-400 text-xs rounded uppercase font-medium flex items-center gap-1">
-                                    <ShieldAlert size={10} /> Bảo mật
-                                </span>
                                 <span className="text-xs text-zinc-500">
                                     {room?.type === 'direct' ? 'Cá nhân' : 'Nhóm'}
                                 </span>

@@ -1,6 +1,6 @@
-# Core Chat E2EE — Web Client
+# Core Chat — Web Client
 
-Ứng dụng chat thời gian thực với mã hóa đầu cuối (End-to-End Encryption) sử dụng React, TypeScript và Vite.
+Ứng dụng chat thời gian thực sử dụng React, TypeScript và Vite.
 
 ## Mục Lục
 
@@ -17,17 +17,19 @@
 
 ## Tổng Quan
 
-**Core Chat E2EE** là web client cho hệ thống chat bảo mật. Toàn bộ nội dung tin nhắn được mã hóa trên thiết bị người dùng (client-side) trước khi gửi lên server — server chỉ nhận/phát/lưu trữ ciphertext mà không thể đọc được nội dung.
+**Core Chat** là web client cho hệ thống chat thời gian thực. Hỗ trợ nhắn tin nhóm và cá nhân qua WebSocket, đồng bộ tin nhắn offline-first, và quản lý nhóm chat.
 
 ### Tính năng chính
 
-- 🔒 **End-to-End Encryption** — Mã hóa ChaCha20-Poly1305 / AES-GCM qua Web Worker
 - 🇻🇳 **Giao diện Tiếng Việt** — Toàn bộ UI được Việt hóa ngôn từ ngắn gọn, dễ hiểu
 - ⚡ **Real-time Messaging** — WebSocket với auto-reconnect và exponential backoff
 - 📂 **Offline-first** — Lưu trữ cục bộ bằng IndexedDB (Dexie.js), hoạt động khi mất mạng
 - 🔄 **Optimistic UI** — Tin nhắn hiển thị ngay khi gửi, cập nhật trạng thái khi server xác nhận
 - 📜 **Gap Detection** — Tự động phát hiện khoảng trống tin nhắn khi offline, hỗ trợ tải bổ sung
 - 🗃️ **Message Queue** — Hàng đợi tin nhắn khi mất kết nối, tự động gửi lại khi reconnect
+- 💬 **Room List** — Preview tin nhắn cuối, badge chưa đọc, sắp xếp theo hoạt động mới nhất
+- 🗑️ **Message Delete** — Xóa tin nhắn qua REST API, cập nhật real-time qua WebSocket
+- 👤 **User Profile** — Fetch profile sau login, cập nhật username/avatar
 
 ---
 
@@ -42,7 +44,6 @@
 | [Zustand](https://zustand.docs.pmnd.rs) | State management (connection status, send queue) |
 | [TanStack React Query](https://tanstack.com/query) | Server state & data fetching |
 | [Dexie.js](https://dexie.org) | IndexedDB wrapper (offline storage) |
-| [libsodium](https://doc.libsodium.org) | Cryptographic operations (E2EE) |
 | [Lucide React](https://lucide.dev) | Icon library |
 | [Axios](https://axios-http.com) | HTTP client |
 | [uuid](https://github.com/uuidjs/uuid) | UUIDv7 generation (message ID) |
@@ -57,44 +58,47 @@ src/
 ├── main.tsx                   # Entry point — React root, QueryClientProvider
 ├── index.css                  # Global styles (Tailwind)
 │
-├── api/                       # (Reserved) API integration layer
-├── assets/                    # Static assets (images, fonts)
-│
 ├── components/                # UI Components
+│   ├── auth/
+│   │   ├── LoginForm.tsx     # Form đăng nhập
+│   │   └── RegisterForm.tsx  # Form đăng ký
 │   ├── chat/
-│   │   ├── ChatWindow.tsx     # Khung chat chính — hiển thị tin nhắn theo room
-│   │   ├── InputArea.tsx      # Ô nhập tin nhắn + gửi
-│   │   ├── MessageBubble.tsx  # Bóng chat đơn lẻ (sent/received)
-│   │   ├── GapMarker.tsx      # Thẻ "Có x tin nhắn ở giữa. Nhấn để tải"
-│   │   └── RoomList.tsx       # Sidebar danh sách phòng chat
-│   └── layout/                # (Reserved) Layout components
-│
-├── features/                  # Feature modules
-│   ├── chat/                  # (Reserved) Chat feature logic
-│   └── rooms/                 # (Reserved) Room management logic
+│   │   ├── ChatWindow.tsx    # Khung chat chính — hiển thị tin nhắn theo room
+│   │   ├── InputArea.tsx     # Ô nhập tin nhắn + gửi
+│   │   ├── MessageBubble.tsx # Bóng chat đơn lẻ (sent/received)
+│   │   ├── GapMarker.tsx     # Thẻ tải thêm tin nhắn bị bỏ lỡ
+│   │   ├── RoomList.tsx      # Sidebar danh sách phòng chat + preview
+│   │   ├── UserProfileCard.tsx # Thẻ profile user + nút logout
+│   │   ├── MessageContextMenu.tsx # Menu chuột phải: sao chép, xóa
+│   │   └── TypingIndicator.tsx # Hiện khi ai đó đang gõ
+│   ├── room/
+│   │   ├── RoomDetailPanel.tsx # Panel chi tiết nhóm (members, invite, leave)
+│   │   ├── CreateRoomModal.tsx # Modal tạo phòng/chat mới
+│   │   └── UserSearchModal.tsx # Modal tìm kiếm người dùng
+│   └── ui/                    # Reusable UI primitives
 │
 ├── hooks/                     # Custom React hooks
 │
 ├── lib/
-│   └── api.ts                 # API client — mock REST endpoints (getRooms, syncMessages, uploadFile)
+│   ├── api.ts                # API client — REST endpoints (auth, rooms, messages, users)
+│   ├── axios-instance.ts     # Axios instance với token interceptor
+│   └── queryClient.ts        # TanStack Query client
+│
+├── pages/
+│   └── AuthPage.tsx          # Trang đăng nhập/đăng ký
 │
 ├── services/
-│   └── SocketService.ts       # WebSocket singleton — connect, auth, send, reconnect, queue flush
+│   └── SocketService.ts      # WebSocket singleton — connect, auth, send, reconnect
 │
 ├── store/
-│   └── chatStore.ts           # Zustand store — connectionStatus, currentRoomId, sendQueue
+│   └── chatStore.ts          # Zustand store — auth, connection, profile, queue
 │
 ├── types/
-│   └── chat.types.ts          # TypeScript types — ChatMessage, RoomKey, WS_Payload
+│   └── chat.types.ts         # TypeScript types — ChatMessage, UserProfile, WS_Payload
 │
-├── utils/
-│   └── db.ts                  # Dexie.js database — CRUD messages, room keys, gap detection
-│
-└── workers/
-    ├── crypto.worker.ts       # Web Worker — encrypt/decrypt operations (libsodium)
-    ├── cryptoClient.ts        # Client wrapper giao tiếp với crypto worker
-    ├── crypto.types.ts        # Types cho worker messages
-    └── crypto.test.ts         # Unit tests cho crypto
+└── utils/
+    ├── db.ts                 # Dexie.js database — CRUD messages, gap detection
+    └── notification.ts       # Browser notification helper
 ```
 
 ---
@@ -117,7 +121,7 @@ npm install
 
 ### Bước 2: Cấu hình biến môi trường
 
-Tạo file `.env` ở thư mục gốc (hoặc chỉnh sửa file có sẵn):
+Tạo file `.env` ở thư mục gốc:
 
 ```bash
 cp .env.example .env
@@ -155,8 +159,8 @@ VITE_WS_URL=ws://localhost:8080
 
 | Biến | Mô tả | Mặc định |
 |---|---|---|
-| `VITE_API_URL` | Base URL cho REST API (đồng bộ tin nhắn, upload, rooms) | `http://localhost:3000` |
-| `VITE_WS_URL` | URL WebSocket Gateway (real-time messaging) | `ws://localhost:8080` |
+| `VITE_API_URL` | Base URL cho REST API | `http://localhost:8080` |
+| `VITE_WS_URL` | URL WebSocket Gateway | `ws://localhost:8080` |
 
 > **Lưu ý:** Tất cả biến môi trường dùng trong client phải có prefix `VITE_` để Vite nhận diện.
 
@@ -173,10 +177,7 @@ User nhập text
 [InputArea] ──► Sinh UUIDv7 (message_id)
     │
     ▼
-[Crypto Worker] ──► Mã hóa text → ciphertext (ChaCha20-Poly1305)
-    │
-    ▼
-[SocketService] ──► Gửi WS payload { message_id, room_id, ciphertext }
+[SocketService] ──► Gửi WS payload { message_id, room_id, content }
     │                    │
     │                    ├── Online → Gửi ngay
     │                    └── Offline → Đẩy vào sendQueue (Zustand)
@@ -199,10 +200,7 @@ Server broadcast event "message"
 [SocketService.onmessage] ──► Parse WS_Payload
     │
     ▼
-[Crypto Worker] ──► Giải mã ciphertext → plaintext
-    │
-    ▼
-[Dexie DB] ──► Lưu message vào IndexedDB
+[Dexie DB] ──► Lưu message (plaintext content) vào IndexedDB
     │
     ▼
 [ChatWindow] ──► Re-render UI với tin nhắn mới
@@ -223,7 +221,7 @@ User mở app sau thời gian offline
 [Gap Detection] ──► So sánh newest_local_ts vs oldest_server_ts
     │
     ├── Không gap → Merge và hiển thị
-    └── Có gap → Hiển thị GapMarker: "Có x tin nhắn. Nhấn để tải"
+    └── Có gap → Hiển thị GapMarker: "Nhấn để tải"
                       │
                       ▼
                  User tap "Tải" → Fetch thêm block 50 tin
@@ -235,11 +233,39 @@ User mở app sau thời gian offline
 |---|---|---|
 | `auth` | Client → Server | Xác thực JWT token sau khi connect |
 | `join` | Client → Server | Tham gia lắng nghe events của room |
-| `leave` | Client → Server | Rời room, thu hồi tài nguyên mạng |
-| `message` | Cả hai chiều | Gửi/nhận tin nhắn mã hóa |
-| `ack` | Server → Client | Xác nhận server đã nhận tin nhắn thành công |
-| `error` | Server → Client | Thông báo lỗi (TOKEN_EXPIRED, INVALID_UUID, ...) |
-| `system` | Server → Client | Thông báo hệ thống |
+| `leave` | Client → Server | Rời room |
+| `message` | Cả hai chiều | Gửi/nhận tin nhắn plaintext |
+| `ack` | Server → Client | Xác nhận server đã nhận tin nhắn |
+| `message_deleted` | Server → Client | Thông báo tin nhắn đã bị xóa |
+| `room_updated` | Server → Client | Metadata nhóm thay đổi |
+| `room_added` | Server → Client | User được thêm vào nhóm |
+| `room_removed` | Server → Client | User bị mời ra khỏi nhóm |
+| `typing` / `typing_stop` | Cả hai | Trạng thái đang gõ |
+| `user_online` / `user_offline` | Server → Client | Presence |
+| `receipt` | Server → Client | Đã đọc tin nhắn |
+| `error` | Server → Client | Thông báo lỗi (TOKEN_EXPIRED, ...) |
+
+### REST API Endpoints
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| POST | `/api/v1/auth/login` | Đăng nhập |
+| POST | `/api/v1/auth/register` | Đăng ký |
+| POST | `/api/v1/auth/refresh` | Refresh token |
+| POST | `/api/v1/auth/logout` | Đăng xuất |
+| GET | `/api/v1/users/me` | Profile hiện tại |
+| GET | `/api/v1/users/:id` | Profile public |
+| PATCH | `/api/v1/users/me` | Cập nhật profile |
+| GET | `/api/v1/rooms` | Danh sách rooms + last_message + unread_count |
+| POST | `/api/v1/rooms` | Tạo room mới |
+| GET | `/api/v1/rooms/:id` | Chi tiết room |
+| PATCH | `/api/v1/rooms/:id` | Cập nhật room (admin) |
+| GET | `/api/v1/rooms/:id/members` | Thành viên (paginated) |
+| POST | `/api/v1/rooms/:id/members` | Mời thành viên |
+| DELETE | `/api/v1/rooms/:id/members/:userId` | Rời/xóa thành viên |
+| GET | `/api/v1/messages/sync` | Đồng bộ tin nhắn |
+| DELETE | `/api/v1/rooms/:roomId/messages/:messageId` | Xóa tin nhắn |
+| POST | `/api/v1/rooms/:roomId/receipts` | Gửi read receipt |
 
 ---
 
@@ -270,16 +296,9 @@ import { useChatStore } from '@/store/chatStore'
 
 ### State Management
 
-- **Zustand** (`chatStore.ts`) — Quản lý trạng thái global: connection status, current room, send queue
-- **TanStack Query** — Server state: danh sách rooms, sync messages
-- **Dexie.js** (`db.ts`) — Persistent storage: messages, room keys (IndexedDB)
-
-### Mã Hóa (E2EE)
-
-- Mọi thao tác mã hóa/giải mã chạy trong **Web Worker** (`crypto.worker.ts`) để không block UI thread
-- Sử dụng **libsodium** (ChaCha20-Poly1305)
-- Client tự sinh `message_id` theo chuẩn **UUIDv7** (time-based sorting)
-- Server **không bao giờ** nhìn thấy plaintext
+- **Zustand** (`chatStore.ts`) — Quản lý trạng thái global: auth, connection status, user profile, send queue
+- **TanStack Query** — Server state: danh sách rooms, sync messages, room members
+- **Dexie.js** (`db.ts`) — Persistent storage: messages (IndexedDB)
 
 ### Thêm Component Mới
 
@@ -301,7 +320,7 @@ socketService.sendMessage({
   message_id: uuidv7(),
   room_id: 'room-1',
   sender_id: 'user-1',
-  ciphertext: '...',
+  content: 'Hello!',
   server_ts: Date.now(),
   status: 'pending'
 })
@@ -319,7 +338,7 @@ import { getLatestMessages, addMessage, updateMessageStatus } from '@/utils/db'
 const messages = await getLatestMessages('room-1', 50)
 
 // Thêm tin nhắn mới (optimistic)
-await addMessage({ message_id: '...', room_id: '...', ... })
+await addMessage({ message_id: '...', room_id: '...', content: '...', ... })
 
 // Cập nhật trạng thái
 await updateMessageStatus('message-id', 'sent', serverTimestamp)
@@ -329,4 +348,5 @@ await updateMessageStatus('message-id', 'sent', serverTimestamp)
 
 ## Tài Liệu Liên Quan
 
-- [Frontend Integration Guide](./docs/frontend-integration-guide.md) — Hướng dẫn tích hợp chi tiết với Backend (WebSocket, REST API, E2EE flow)
+- [Frontend Integration Guide](./docs/frontend-integration-guide.md) — Hướng dẫn tích hợp chi tiết với Backend
+- [Changelog: Remove E2EE](./docs/changelog-remove-e2ee-complete-api.md) — Chi tiết breaking changes

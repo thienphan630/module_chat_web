@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
 import { insertMessages } from '../../utils/db'
-import { decryptAndProcessMessages } from '../../utils/decrypt-messages'
 import { LoaderCircle, AlertCircle } from 'lucide-react'
 import type { ChatMessage } from '../../types/chat.types'
 
@@ -16,16 +15,14 @@ export const GapMarker = ({ roomId, fromTs }: { roomId: string, fromTs: number, 
         setIsLoading(true)
         setError(false)
         try {
-            const res = await api.syncMessages(roomId, fromTs, 50)
+            const res = await api.syncMessages(roomId, { afterServerTs: fromTs }, 50)
             const msgs: ChatMessage[] = res.data || []
 
             if (msgs.length > 0) {
-                await decryptAndProcessMessages(roomId, msgs)
                 await insertMessages(msgs)
             }
 
             hasFetched.current = true
-            // useLiveQuery in ChatWindow picks up new messages automatically
         } catch (err) {
             console.error('[GapMarker] Failed to fetch gap messages:', err)
             setError(true)
@@ -69,4 +66,3 @@ export const GapMarker = ({ roomId, fromTs }: { roomId: string, fromTs: number, 
         </div>
     )
 }
-

@@ -1,45 +1,50 @@
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 
-export interface MessageAttachment {
-    file_path: string          // URL to encrypted blob on storage
-    file_name: string          // Original filename
-    file_type: string          // MIME type
-    file_size: number          // Size in bytes
-    file_key_encrypted: string // File key encrypted with room key
-}
-
 export interface ChatMessage {
     message_id: string // UUIDv7
     room_id: string
     sender_id: string
-    server_ts: number // Timestamp from server (used for sorting and gap detection), can be local timestamp if pending
-    ciphertext?: string // Encrypted message payload from server
-    text?: string // Decrypted plaintext for rendering
+    server_ts: number // Timestamp from server (used for sorting and gap detection)
+    content: string   // Plaintext message content
     status: MessageStatus
-    aad_data?: string // Additional authenticated data
-    is_deleted?: boolean // Tombstone flag
-    attachment?: MessageAttachment // E2EE file attachment metadata
+    is_deleted?: boolean
 }
 
-export interface RoomKey {
-    room_id: string
-    shared_key: string // Base64 encoded or hex encoded symmetric key for the room
-    created_at: number
-}
+export type WS_Event_Type =
+    | 'auth' | 'join' | 'leave' | 'ack'
+    | 'message' | 'new_message'
+    | 'error' | 'system'
+    | 'member_joined' | 'member_left'
+    | 'room_member_joined' | 'room_member_left'         // legacy aliases
+    | 'typing' | 'typing_stop'
+    | 'presence' | 'user_online' | 'user_offline'        // presence variants
+    | 'receipt'
+    | 'room_added' | 'room_removed' | 'room_updated'
+    | 'message_deleted';
 
-export type WS_Event_Type = 'auth' | 'join' | 'leave' | 'ack' | 'message' | 'error' | 'system' | 'room_member_joined' | 'room_member_left' | 'typing' | 'typing_stop' | 'user_online' | 'user_offline' | 'read' | 'receipt' | 'room_added' | 'room_removed' | 'room_updated';
 export interface WS_Payload {
     type: WS_Event_Type;
     token?: string;
     room_id?: string;
     message_id?: string;
+    user_id?: string;
+    sender_id?: string;
     server_ts?: number;
     code?: string;
-    data?: any; // Ciphertext từ user khác khi nhận event message
-    room?: any; // Room payload for room_added
-    reason?: string; // Reason for room_removed
-    removed_by?: string; // Admin ID who removed
-    added_by?: string; // Admin ID who added
+    message?: string;                    // Error/system message text
+    content?: string;                    // Plaintext message content
+    is_typing?: boolean;                 // Typing indicator flag
+    status?: string;                     // Presence status
+    last_read_message_id?: string;       // Receipt: last read msg
+    rooms?: string[];                    // Presence: affected rooms
+    data?: any;                          // Generic data for various events
+    room?: any;                          // Room payload for room_added
+    reason?: string;                     // Reason for room_removed
+    removed_by?: string;                 // Admin ID who removed
+    added_by?: string;                   // Admin ID who added
+    deleted_by?: string;                 // For message_deleted event
+    updates?: Record<string, any>;       // For room_updated event
+    updated_by?: string;                 // For room_updated event
 }
 
 // --- Authentication Types ---
@@ -66,15 +71,38 @@ export interface AuthResponse {
     refresh_token: string
 }
 
+// --- User Profile Types ---
+
+export interface UserProfile {
+    user_id: string
+    username: string
+    email?: string       // Only present for own profile (GET /users/me)
+    avatar_url: string | null
+    created_at?: string  // Only present for own profile
+}
+
+export interface UpdateProfilePayload {
+    username?: string    // 3-30 chars
+    avatar_url?: string | null
+}
+
 // --- Room Management Types ---
 
 export type RoomType = 'group' | 'direct'
 export type MemberRole = 'admin' | 'member'
 
+export interface LastMessage {
+    message_id: string
+    sender_id: string
+    content: string
+    server_ts: number
+}
+
 export interface Room {
     room_id: string
     name: string
     type: RoomType
+    avatar_url?: string | null
     created_by: string
     member_count?: number
 }
@@ -83,11 +111,11 @@ export interface RoomMember {
     room_id: string
     room_name: string
     room_type: RoomType
+    room_avatar_url: string | null
     role: MemberRole
     joined_at: string
-    user_id?: string
-    username?: string
-    email?: string
+    last_message: LastMessage | null
+    unread_count: number
 }
 
 /** Member detail returned by GET /api/v1/rooms/:roomId/members (paginated) */
@@ -117,12 +145,18 @@ export interface InviteMembersPayload {
     user_ids: string[]
 }
 
+export interface UpdateRoomPayload {
+    name?: string
+    avatar_url?: string | null
+}
+
 export interface UserSearchResult {
     user_id: string
     username: string
     email: string
     avatar_url?: string
 }
+
 // --- WebSocket Error Codes ---
 
 export const WS_ERROR_CODES = {
@@ -132,54 +166,3 @@ export const WS_ERROR_CODES = {
 } as const
 
 export type WsErrorCode = typeof WS_ERROR_CODES[keyof typeof WS_ERROR_CODES]
-
-// --- E2EE Key Management Types ---
-
-export interface UploadKeysPayload {
-    identity_key: string;
-    signed_pre_key: {
-        key_id: number;
-        public_key: string;
-        signature: string;
-    };
-    one_time_pre_keys: Array<{
-        key_id: number;
-        public_key: string;
-    }>;
-}
-
-export interface FetchKeysPayload {
-    user_ids: string[];
-}
-
-export interface UserPreKeyBundle {
-    user_id: string;
-    identity_key: string;
-    signed_pre_key: {
-        key_id: number;
-        public_key: string;
-        signature: string;
-    };
-    one_time_pre_key?: {
-        key_id: number;
-        public_key: string;
-    };
-}
-
-export interface FetchKeysResponse {
-    keys: Record<string, UserPreKeyBundle>;
-}
-
-// --- E2EE Room Key Distribution (via messages) ---
-
-/** AAD type used to tag room key distribution messages */
-export const E2EE_AAD_TYPE = 'e2ee.room_key' as const
-
-/** Structure of aad_data for room key messages */
-export interface RoomKeyAAD {
-    type: typeof E2EE_AAD_TYPE
-    target_user_id: string            // Recipient of the wrapped key
-    sender_identity_key: string       // Sender's identity public key (for verification)
-    sender_signed_pre_key_pub: string // Sender's X25519 signed pre-key (for ECDH unwrap)
-}
-

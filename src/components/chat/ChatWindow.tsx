@@ -7,30 +7,23 @@ import { TypingIndicator } from './TypingIndicator'
 import { RoomDetailPanel } from '../room/RoomDetailPanel'
 import { Avatar } from '../ui/Avatar'
 import { MessageSkeleton } from '../ui/Skeleton'
-import { ShieldAlert, Info, ChevronDown } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { Info, ChevronDown, MessageSquare } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { insertMessages } from '../../utils/db'
-import { isRoomKeyMessage } from '../../services/e2ee-key-manager'
-import { decryptAndProcessMessages } from '../../utils/decrypt-messages'
-
 import { useChatStore } from '../../store/chatStore'
 import type { ChatMessage } from '../../types/chat.types'
+import { useMemo } from 'react'
 
 export const ChatWindow = ({ roomId }: { roomId: string }) => {
     const bottomRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    const allMessages = useLiveQuery(
+    const messages = useLiveQuery(
         () => db.messages.where('[room_id+server_ts]').between([roomId, 0], [roomId, Number.MAX_SAFE_INTEGER]).sortBy('server_ts'),
         [roomId],
         []
-    )
-
-    const messages = useMemo(
-        () => allMessages.filter(msg => !isRoomKeyMessage(msg.aad_data)),
-        [allMessages]
     )
 
     const [isSyncing, setIsSyncing] = useState(false)
@@ -69,10 +62,7 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         setShowDetail(false)
     }, [roomId])
 
-    // --- Sync messages from server (used for both initial load and incremental sync) ---
-    // Backend only supports GET /api/v1/messages/sync endpoint.
-    // - Without after_server_ts: returns latest N messages (initial load)
-    // - With after_server_ts: returns messages newer than that timestamp (incremental)
+    // Sync messages from server (initial load + incremental forward sync)
     const syncMessages = async () => {
         if (isSyncing) return
         setIsSyncing(true)
@@ -81,15 +71,17 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                 ? messages[messages.length - 1].server_ts
                 : undefined
 
-            const res = await api.syncMessages(roomId, newestTs, 50)
+            const res = await api.syncMessages(
+                roomId,
+                newestTs ? { afterServerTs: newestTs } : undefined,
+                50
+            )
             const serverMsgs: ChatMessage[] = res.data || []
 
             if (serverMsgs.length > 0) {
-                await decryptAndProcessMessages(roomId, serverMsgs)
                 await insertMessages(serverMsgs)
             }
 
-            // If initial load returned fewer than 50, we've reached the start
             if (!newestTs && serverMsgs.length < 50) {
                 setHasReachedStart(true)
             }
@@ -100,14 +92,48 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         }
     }
 
-    // --- Sync on room open: always fetch from server ---
+    // Load older messages: backward pagination from oldest local message
+    const loadOlderMessages = async () => {
+        if (isSyncing || hasReachedStart) return
+        setIsSyncing(true)
+        try {
+            const oldestTs = messages && messages.length > 0
+                ? messages[0].server_ts
+                : undefined
+
+            if (!oldestTs) {
+                setIsSyncing(false)
+                return
+            }
+
+            const res = await api.syncMessages(
+                roomId,
+                { beforeServerTs: oldestTs },
+                50
+            )
+            const serverMsgs: ChatMessage[] = res.data || []
+
+            if (serverMsgs.length > 0) {
+                await insertMessages(serverMsgs)
+            }
+            if (serverMsgs.length < 50) {
+                setHasReachedStart(true)
+            }
+        } catch (err) {
+            console.error('[Sync] Failed to load older messages:', err)
+        } finally {
+            setIsSyncing(false)
+        }
+    }
+
+    // Sync on room open
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (isSyncing) return
         syncMessages()
-    }, [roomId]) // Only trigger on room change — NOT on messages change
+    }, [roomId])
 
-    // --- Sync on WS reconnect (Phase 04) ---
+    // Sync on WS reconnect
     const connectionStatus = useChatStore(s => s.connectionStatus)
     const prevConnectionRef = useRef(connectionStatus)
 
@@ -135,27 +161,38 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
         setShowScrollFab(distFromBottom > 200)
     }, [])
 
-    // Read receipts — send via REST (BE rate-limits 2s/user/room, fail-open)
+    // Read receipts — track last sent to avoid duplicate 400s
     const currentUserId = useChatStore(s => s.currentUserId)
+    const lastReceiptRef = useRef<Record<string, string>>({})
     useEffect(() => {
         if (messages.length === 0) return
         const lastMsg = messages[messages.length - 1]
-        if (lastMsg.sender_id !== currentUserId && lastMsg.status !== 'read') {
-            const timer = setTimeout(() => {
-                api.sendReceipt(roomId, lastMsg.message_id).catch(() => {
-                    // Silent fail — read receipts are non-critical
-                })
-            }, 500)
-            return () => clearTimeout(timer)
-        }
+
+        // Skip own messages, already-read messages, and pending/unsent messages
+        if (!lastMsg.message_id) return
+        if (lastMsg.sender_id === currentUserId) return
+        if (lastMsg.status === 'read') return
+        if (lastMsg.status === 'pending' || lastMsg.status === 'failed') return
+
+        // Skip if we already sent a receipt for this message in this room
+        if (lastReceiptRef.current[roomId] === lastMsg.message_id) return
+
+        const timer = setTimeout(() => {
+            lastReceiptRef.current[roomId] = lastMsg.message_id
+            api.sendReceipt(roomId, lastMsg.message_id).catch((err) => {
+                // Revert so it can retry next time
+                delete lastReceiptRef.current[roomId]
+                console.warn('[ReadReceipt] Failed to send receipt:', err?.response?.status, err?.response?.data)
+            })
+        }, 500)
+        return () => clearTimeout(timer)
     }, [messages.length, roomId, currentUserId])
 
     if (!roomId) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500">
-                <ShieldAlert size={48} className="mb-4 text-zinc-800" />
+                <MessageSquare size={48} className="mb-4 text-zinc-800" />
                 <h3 className="text-xl">Chọn một cuộc trò chuyện</h3>
-                <p>Nhắn tin an toàn qua mã hóa bảo mật.</p>
             </div>
         )
     }
@@ -163,20 +200,15 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
     return (
         <div className="flex-1 flex bg-zinc-950">
             <div className="flex-1 flex flex-col animate-fade-in">
-                {/* Header — glass */}
+                {/* Header */}
                 <div className="px-4 py-3 border-b border-zinc-800/50 flex justify-between items-center glass sticky top-0 z-10">
                     <div className="flex items-center gap-3">
                         <Avatar userId={roomId} name={roomName} size="md" />
                         <div>
                             <h2 className="text-base font-semibold text-zinc-100">{roomName}</h2>
-                            <div className="flex items-center gap-2">
-                                <span className="text-emerald-400 text-[10px] font-medium flex items-center gap-0.5">
-                                    <ShieldAlert size={10} /> Bảo mật
-                                </span>
-                                {memberCount > 0 && (
-                                    <span className="text-[10px] text-zinc-500">{memberCount} thành viên</span>
-                                )}
-                            </div>
+                            {memberCount > 0 && (
+                                <span className="text-[10px] text-zinc-500">{memberCount} thành viên</span>
+                            )}
                         </div>
                     </div>
                     <button
@@ -200,9 +232,6 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                 >
                     {messages.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in">
-                            <div className="w-14 h-14 rounded-2xl bg-emerald-500/5 flex items-center justify-center mb-3">
-                                <ShieldAlert size={24} className="text-emerald-600" />
-                            </div>
                             <p className="text-zinc-400 text-sm font-medium">Chưa có tin nhắn</p>
                             <p className="text-xs text-zinc-600 mt-1">Hãy gửi tin nhắn đầu tiên!</p>
                         </div>
@@ -217,7 +246,7 @@ export const ChatWindow = ({ roomId }: { roomId: string }) => {
                                         </div>
                                     ) : (
                                         <button
-                                            onClick={syncMessages}
+                                            onClick={loadOlderMessages}
                                             className="px-4 py-2 bg-zinc-800/50 text-zinc-400 rounded-xl text-xs hover:bg-zinc-800 transition-colors"
                                         >
                                             Tải thêm tin nhắn cũ

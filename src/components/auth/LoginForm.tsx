@@ -22,14 +22,19 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
         try {
             const data = await api.login({ email, password })
 
-            // Store tokens + user info
+            // Store tokens + user ID
             useChatStore.getState().setTokens(data.access_token, data.refresh_token)
             useChatStore.getState().setCurrentUserId(data.user_id)
-            useChatStore.getState().setUserProfile(email)
             localStorage.setItem('userId', data.user_id)
 
-            // Initialize E2EE keys (generate + upload if first time)
-            await useChatStore.getState().initializeE2EEKeys()
+            // Fetch full profile from API
+            try {
+                const profileRes = await api.getMyProfile()
+                useChatStore.getState().setUserFromAPI(profileRes.user)
+            } catch {
+                // Fallback — use email from login form
+                useChatStore.getState().setUserProfile(email)
+            }
 
             // Connect WebSocket with fresh token
             socketService.connect(data.access_token)

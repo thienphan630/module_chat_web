@@ -1,11 +1,11 @@
 import { useChatStore } from '../../store/chatStore'
-import { ShieldCheck, Wifi, WifiOff, Loader2 } from 'lucide-react'
+import { Wifi, WifiOff, Loader2 } from 'lucide-react'
 
 export const ConnectionBadge = () => {
     const status = useChatStore(s => s.connectionStatus)
 
     const config = {
-        connected:    { dot: 'bg-emerald-400', text: 'Bảo mật', icon: ShieldCheck, pulse: false },
+        connected:    { dot: 'bg-emerald-400', text: 'Đã kết nối', icon: Wifi, pulse: false },
         connecting:   { dot: 'bg-yellow-400', text: 'Đang kết nối...', icon: Loader2, pulse: true },
         reconnecting: { dot: 'bg-yellow-400', text: 'Đang kết nối lại...', icon: Loader2, pulse: true },
         error:        { dot: 'bg-red-400', text: 'Lỗi kết nối', icon: WifiOff, pulse: false },

@@ -1,15 +1,23 @@
 import { useChatStore } from '../../store/chatStore'
 import { socketService } from '../../services/SocketService'
+import { api } from '../../lib/api'
 import { Avatar } from '../ui/Avatar'
-import { LogOut, Shield } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 export const UserProfileCard = () => {
     const currentUserId = useChatStore((state) => state.currentUserId)
     const userEmail = useChatStore((state) => state.userEmail)
     const userName = useChatStore((state) => state.userName)
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        const refreshToken = useChatStore.getState().refreshToken
         socketService.disconnect()
+
+        // Call logout API (idempotent — fire and forget)
+        if (refreshToken) {
+            await api.logout(refreshToken)
+        }
+
         useChatStore.getState().clearAuth()
     }
 
@@ -29,12 +37,9 @@ export const UserProfileCard = () => {
 
                 {/* User info */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold text-zinc-200 truncate">
-                            {displayName}
-                        </p>
-                        <Shield size={12} className="text-emerald-500/60 shrink-0" />
-                    </div>
+                    <p className="text-sm font-semibold text-zinc-200 truncate">
+                        {displayName}
+                    </p>
                     <p className="text-[11px] text-zinc-500 truncate" title={userEmail || shortId}>
                         {userEmail || shortId}
                     </p>

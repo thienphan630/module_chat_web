@@ -26,11 +26,15 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
             // Store tokens + user info
             useChatStore.getState().setTokens(data.access_token, data.refresh_token)
             useChatStore.getState().setCurrentUserId(data.user_id)
-            useChatStore.getState().setUserProfile(email, username)
             localStorage.setItem('userId', data.user_id)
 
-            // Initialize E2EE keys (generate + upload on first registration)
-            await useChatStore.getState().initializeE2EEKeys()
+            // Fetch full profile from API
+            try {
+                const profileRes = await api.getMyProfile()
+                useChatStore.getState().setUserFromAPI(profileRes.user)
+            } catch {
+                useChatStore.getState().setUserProfile(email, username)
+            }
 
             // Connect WebSocket
             socketService.connect(data.access_token)
@@ -48,7 +52,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
                     <UserPlus size={32} className="text-emerald-400" />
                 </div>
                 <h1 className="text-2xl font-bold text-zinc-100">Tạo tài khoản</h1>
-                <p className="text-zinc-500 text-sm mt-1">Tham gia cùng cộng đồng trò chuyện bảo mật</p>
+                <p className="text-zinc-500 text-sm mt-1">Tham gia cùng cộng đồng trò chuyện</p>
             </div>
 
             {error && (

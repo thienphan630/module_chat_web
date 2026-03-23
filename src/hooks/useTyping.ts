@@ -15,7 +15,7 @@ export function useTyping(roomId: string) {
         // Send 'typing' event if not already flagged
         if (!isTypingRef.current) {
             isTypingRef.current = true
-            socketService.sendPayload({ type: 'typing', room_id: roomId })
+            socketService.sendPayload({ type: 'typing', room_id: roomId, is_typing: true })
         }
 
         // Reset the stop timer
@@ -23,10 +23,10 @@ export function useTyping(roomId: string) {
             clearTimeout(typingTimeoutRef.current)
         }
 
-        // Auto-send 'typing_stop' after 3s of inactivity
+        // Auto-send typing stop after 3s of inactivity
         typingTimeoutRef.current = setTimeout(() => {
             isTypingRef.current = false
-            socketService.sendPayload({ type: 'typing_stop', room_id: roomId })
+            socketService.sendPayload({ type: 'typing', room_id: roomId, is_typing: false })
         }, 3000)
     }, [roomId])
 

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Loader2, Search, MessageSquare, Users } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
-import { distributeRoomKey } from '../../services/e2ee-key-manager'
 import { useQueryClient } from '@tanstack/react-query'
 import type { UserSearchResult } from '../../types/chat.types'
 
@@ -94,10 +93,6 @@ export const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                 type: isGroupMode ? 'group' : 'direct',
                 member_ids: memberIds,
             })
-
-            // E2EE: distribute room key to all members
-            const allMemberIds = [currentUserId, ...memberIds]
-            await distributeRoomKey(result.room.room_id, allMemberIds)
 
             // Refresh room list + navigate
             await queryClient.invalidateQueries({ queryKey: ['my-rooms'] })

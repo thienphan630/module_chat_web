@@ -1,14 +1,12 @@
 import { useChatStore } from '../store/chatStore'
 import type { WS_Payload, ChatMessage } from '../types/chat.types'
 import { WS_ERROR_CODES } from '../types/chat.types'
-import { addMessage, updateMessageStatus, getRoomKey, markDeleted } from '../utils/db'
+import { addMessage, updateMessageStatus, markDeleted, markMessagesReadUpTo } from '../utils/db'
 import { api } from '../lib/api'
-import { CryptoClient } from '../workers/cryptoClient'
-import { isRoomKeyMessage, parseRoomKeyAAD, handleIncomingRoomKey, distributeRoomKey } from './e2ee-key-manager'
 import { showBrowserNotification } from '../utils/notification'
 import { queryClient } from '../lib/queryClient'
 
-const AUTH_TIMEOUT_MS = 3000 // Server expects auth within 3 seconds
+const AUTH_TIMEOUT_MS = 3000
 
 class SocketService {
     private static instance: SocketService;
@@ -37,7 +35,6 @@ class SocketService {
         }
 
         const currentToken = token || useChatStore.getState().accessToken || '';
-
         useChatStore.getState().setConnectionStatus('connecting');
 
         this.socket = new WebSocket(this.url);
@@ -46,26 +43,20 @@ class SocketService {
             this.reconnectAttempts = 0;
             useChatStore.getState().setConnectionStatus('connected');
 
-            // Push auth payload — must arrive within 3 seconds
-            this.sendPayload({
-                type: 'auth',
-                token: currentToken
-            });
+            this.sendPayload({ type: 'auth', token: currentToken });
 
-            // Set auth timeout — server closes connection if auth not received in time
             this.authTimeout = window.setTimeout(() => {
                 console.warn('[SocketService] Auth timeout — no response within 3s');
             }, AUTH_TIMEOUT_MS);
 
-            // Flush offline queue if any
             this.flushQueue();
         };
 
         this.socket.onmessage = (event) => {
             try {
                 const payload: WS_Payload = JSON.parse(event.data);
+                console.debug('[WS ←]', payload.type, payload);
 
-                // Clear auth timeout on any successful server response
                 if (this.authTimeout) {
                     clearTimeout(this.authTimeout);
                     this.authTimeout = null;
@@ -80,14 +71,13 @@ class SocketService {
         this.socket.onclose = (event) => {
             this.clearAuthTimeout();
             useChatStore.getState().setConnectionStatus('disconnected');
-            if (event.code !== 1000) { // Normal closure
+            if (event.code !== 1000) {
                 this.reconnect();
             }
         };
 
         this.socket.onerror = (error) => {
             console.error('WebSocket Error:', error);
-            // Wait for onclose to trigger reconnect logic
         };
     }
 
@@ -108,136 +98,128 @@ class SocketService {
 
         switch (payload.type) {
             case 'ack':
-                if (payload.room_id && payload.message_id) {
-                    updateMessageStatus(payload.message_id, 'sent', payload.server_ts);
+                if (payload.message_id) {
+                    try {
+                        await updateMessageStatus(payload.message_id, 'sent', payload.server_ts);
+                    } catch (err) {
+                        console.error('[SocketService] Failed to update message status (ack):', err);
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
                 }
                 break;
-            case 'message':
-                if (payload.room_id && payload.message_id && payload.data) {
-                    // Phase 02: Check if this is a room key distribution message
-                    if (isRoomKeyMessage(payload.data.aad_data)) {
-                        const aad = parseRoomKeyAAD(payload.data.aad_data);
-                        if (aad && payload.data.ciphertext) {
-                            const success = await handleIncomingRoomKey(
-                                payload.room_id,
-                                payload.data.sender_id || 'unknown',
-                                payload.data.ciphertext,
-                                aad
-                            );
-                            if (success) {
-                                // Refresh room list when new room key is received (usually means added to a new room)
-                                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
-                            }
-                        }
-                        // Do NOT render room key messages as chat messages
-                        break;
+
+            // Server sends 'new_message'; also handle 'message' as fallback
+            case 'new_message':
+            case 'message': {
+                // Defensive: support both flat payload and nested data payload
+                const msgData = payload.data || payload;
+                const msgId = payload.message_id || msgData.message_id;
+                const msgRoomId = payload.room_id || msgData.room_id;
+
+                if (msgRoomId && msgId) {
+                    try {
+                        await addMessage({
+                            message_id: msgId,
+                            room_id: msgRoomId,
+                            sender_id: payload.sender_id || msgData.sender_id || 'unknown',
+                            server_ts: payload.server_ts || msgData.server_ts || Date.now(),
+                            content: payload.content || msgData.content || '',
+                            status: 'sent'
+                        });
+                    } catch (err) {
+                        console.error('[SocketService] Failed to add message to DB:', err);
                     }
 
-                    // Normal message: decrypt ciphertext using room key from DB
-                    let decryptedText: string | undefined;
+                    queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
 
-                    if (payload.data.ciphertext) {
-                        try {
-                            const roomKey = await getRoomKey(payload.room_id);
-                            if (roomKey) {
-                                decryptedText = await CryptoClient.decryptText(
-                                    payload.data.ciphertext,
-                                    roomKey.shared_key
-                                );
-                            } else {
-                                decryptedText = '[E2EE key not found]';
-                                console.warn(`[E2EE] No room key for ${payload.room_id} — cannot decrypt`);
-                            }
-                        } catch (err) {
-                            console.error('[E2EE] Decryption failed:', err);
-                            decryptedText = '[Decryption failed]';
-                        }
-                    }
-
-                    // Phase 05: Check if this is a delete tombstone
-                    if (payload.data.aad_data) {
-                        try {
-                            const aad = JSON.parse(payload.data.aad_data);
-                            if (aad.type === 'm.room.message.delete' && decryptedText) {
-                                const parsed = JSON.parse(decryptedText);
-                                if (parsed.target_id) {
-                                    await markDeleted(parsed.target_id);
-                                    break; // Don't render tombstone as a normal message
-                                }
-                            }
-                        } catch {
-                            // Not a tombstone — continue normal flow
-                        }
-                    }
-
-                    addMessage({
-                        message_id: payload.message_id,
-                        room_id: payload.room_id,
-                        sender_id: payload.data.sender_id || 'unknown',
-                        server_ts: payload.server_ts || Date.now(),
-                        ciphertext: payload.data.ciphertext,
-                        text: decryptedText,
-                        aad_data: payload.data.aad_data,
-                        status: 'sent'
-                    });
-
-                    // Browser notification for messages in non-active rooms
-                    if (chatStore.currentRoomId !== payload.room_id) {
+                    if (chatStore.currentRoomId !== msgRoomId) {
                         showBrowserNotification(
-                            `New message in ${payload.room_id}`,
-                            decryptedText?.slice(0, 100) || 'Encrypted message',
-                            payload.room_id
+                            `New message in ${msgRoomId}`,
+                            (payload.content || msgData.content || '').slice(0, 100),
+                            msgRoomId
                         )
                     }
                 }
                 break;
+            }
+
             case 'system':
-                console.log('System message:', payload.data);
-                break;
-            case 'room_member_joined':
-                console.log(`[SocketService] User ${payload.data?.user_id} joined room ${payload.room_id}`);
-                this.handleMemberJoined(payload.room_id!, payload.data?.user_id);
-                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
-                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
-                break;
-            case 'room_member_left':
-                console.log(`[SocketService] User ${payload.data?.user_id} left room ${payload.room_id}`);
-                this.handleMemberLeft(payload.room_id!, payload.data?.user_id);
-                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
-                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
+                console.log('[SocketService] System:', JSON.stringify(payload));
                 break;
 
-            // Phase 04: Ephemeral UX events
-            case 'typing':
-                if (payload.room_id && payload.data?.sender_id) {
-                    chatStore.setTyping(payload.room_id, payload.data.sender_id, true)
-                    // Auto-clear after 4s if typing_stop never arrives
+            // Server uses 'member_joined' / 'member_left'; keep legacy aliases too
+            case 'member_joined':
+            case 'room_member_joined': {
+                const joinedUserId = payload.user_id || payload.data?.user_id;
+                console.log(`[SocketService] User ${joinedUserId} joined room ${payload.room_id}`);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
+                break;
+            }
+
+            case 'member_left':
+            case 'room_member_left': {
+                const leftUserId = payload.user_id || payload.data?.user_id;
+                console.log(`[SocketService] User ${leftUserId} left room ${payload.room_id}`);
+                queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
+                if (payload.room_id) queryClient.invalidateQueries({ queryKey: ['room-members', payload.room_id] });
+                break;
+            }
+
+            // Server sends typing with { room_id, user_id }
+            case 'typing': {
+                const typingUserId = payload.user_id || payload.data?.sender_id || payload.data?.user_id;
+                if (payload.room_id && typingUserId) {
+                    chatStore.setTyping(payload.room_id, typingUserId, true)
                     setTimeout(() => {
-                        useChatStore.getState().setTyping(payload.room_id!, payload.data.sender_id, false)
+                        useChatStore.getState().setTyping(payload.room_id!, typingUserId, false)
                     }, 4000)
                 }
                 break;
-            case 'typing_stop':
-                if (payload.room_id && payload.data?.sender_id) {
-                    chatStore.setTyping(payload.room_id, payload.data.sender_id, false)
+            }
+
+            case 'typing_stop': {
+                const stopUserId = payload.user_id || payload.data?.sender_id || payload.data?.user_id;
+                if (payload.room_id && stopUserId) {
+                    chatStore.setTyping(payload.room_id, stopUserId, false)
                 }
                 break;
+            }
+
+            // Server sends 'presence' with { user_id, status: 'online'|'offline' }
+            case 'presence': {
+                const presenceUserId = payload.user_id || payload.data?.user_id;
+                const presenceStatus = (payload.status || payload.data?.status) as 'online' | 'offline' | undefined;
+                if (presenceUserId && presenceStatus) {
+                    chatStore.setPresence(presenceUserId, presenceStatus)
+                }
+                break;
+            }
+
+            // Keep legacy event names as fallback
             case 'user_online':
-                if (payload.data?.user_id) {
-                    chatStore.setPresence(payload.data.user_id, 'online')
+                if (payload.user_id || payload.data?.user_id) {
+                    chatStore.setPresence(payload.user_id || payload.data?.user_id, 'online')
                 }
                 break;
+
             case 'user_offline':
-                if (payload.data?.user_id) {
-                    chatStore.setPresence(payload.data.user_id, 'offline')
+                if (payload.user_id || payload.data?.user_id) {
+                    chatStore.setPresence(payload.user_id || payload.data?.user_id, 'offline')
                 }
                 break;
-            case 'receipt':
-                if (payload.message_id && payload.data?.user_id) {
-                    chatStore.markMessageRead(payload.message_id, payload.data.user_id)
-                    updateMessageStatus(payload.message_id, 'read')
+
+            case 'receipt': {
+                const receiptMsgId = payload.last_read_message_id || payload.message_id || payload.data?.message_id || payload.data?.last_read_message_id
+                const receiptUserId = payload.user_id || payload.data?.user_id
+                if (receiptMsgId && receiptUserId) {
+                    chatStore.markMessageRead(receiptMsgId, receiptUserId)
+                    await markMessagesReadUpTo(receiptMsgId)
+                } else {
+                    console.warn('[Receipt] Missing msgId or userId — receipt ignored', payload)
                 }
                 break;
+            }
 
             case 'room_added':
                 console.log(`[SocketService] User added to room ${payload.room?.room_id || payload.room_id}`);
@@ -253,7 +235,6 @@ class SocketService {
             case 'room_removed':
                 console.log(`[SocketService] User removed from room ${payload.room_id}`);
                 queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
-                
                 if (chatStore.currentRoomId === payload.room_id) {
                     chatStore.setCurrentRoomId(null);
                     showBrowserNotification('Thông báo nhóm', 'Bạn vừa bị quản trị viên mời ra khỏi nhóm', payload.room_id || '');
@@ -268,66 +249,34 @@ class SocketService {
                 queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
                 if (payload.room_id) {
                     queryClient.invalidateQueries({ queryKey: ['room', payload.room_id] });
+                    queryClient.invalidateQueries({ queryKey: ['room-detail', payload.room_id] });
+                }
+                break;
+
+            case 'message_deleted':
+                if (payload.message_id) {
+                    try {
+                        await markDeleted(payload.message_id);
+                    } catch (err) {
+                        console.error('[SocketService] Failed to mark message deleted:', err);
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['my-rooms'] });
                 }
                 break;
 
             default:
+                console.warn('[SocketService] Unhandled event type:', payload.type, payload);
                 break;
         }
     }
 
-    private async handleMemberJoined(roomId: string, newUserId: string) {
-        if (!roomId || !newUserId) return;
-
-        const currentUserId = useChatStore.getState().currentUserId;
-        if (newUserId === currentUserId) return; // We joined — key comes from existing member
-
-        // Check if we have a room key to distribute
-        const roomKey = await getRoomKey(roomId);
-        if (!roomKey) {
-            console.log(`[E2EE] No room key for ${roomId} — cannot distribute to new member`);
-            return;
-        }
-
-        console.log(`[E2EE] Distributing room key to new member ${newUserId} in room ${roomId}`);
-        try {
-            await distributeRoomKey(roomId, [newUserId]);
-        } catch (err) {
-            console.error('[E2EE] Failed to distribute key to new member:', err);
-        }
-    }
-
-    private async handleMemberLeft(roomId: string, leftUserId: string) {
-        if (!roomId || !leftUserId) return;
-
-        const currentUserId = useChatStore.getState().currentUserId;
-        if (leftUserId === currentUserId) return; // We left — nothing to rotate
-
-        // Check if we have a room key (only existing members can rotate)
-        const roomKey = await getRoomKey(roomId);
-        if (!roomKey) return;
-
-        console.log(`[E2EE] Member ${leftUserId} left room ${roomId}. Rotating room key...`);
-
-        try {
-            // Fetch remaining members via paginated API
-            const membersRes = await api.fetchRoomMembers(roomId);
-            const remainingMemberIds = membersRes.members
-                .map(m => m.user_id)
-                .filter(id => id !== leftUserId && id !== currentUserId);
-
-            // Generate new key + distribute to remaining members
-            if (remainingMemberIds.length > 0) {
-                await distributeRoomKey(roomId, remainingMemberIds);
-            }
-            console.log(`[E2EE] Room key rotated for ${roomId}`);
-        } catch (err) {
-            console.error('[E2EE] Failed to rotate key after member left:', err);
-        }
-    }
-
     private handleError(payload: WS_Payload) {
-        switch (payload.code) {
+        const errorCode = payload.code || (payload as any).error_code || (payload.data as any)?.code;
+        const errorMessage = (payload as any).message || payload.data?.message || payload.reason || '';
+
+        console.warn('[SocketService] WS Error payload:', JSON.stringify(payload));
+
+        switch (errorCode) {
             case WS_ERROR_CODES.TOKEN_EXPIRED:
                 this.handleTokenExpired();
                 break;
@@ -336,10 +285,10 @@ class SocketService {
                 this.disconnect();
                 break;
             case WS_ERROR_CODES.NOT_A_MEMBER:
-                console.warn(`[SocketService] Not a member: ${payload.data?.message || payload.room_id}`);
+                console.warn(`[SocketService] Not a member: ${errorMessage || payload.room_id}`);
                 break;
             default:
-                console.error('[SocketService] WS Error:', payload.code, payload.data);
+                console.error(`[SocketService] Unhandled error: code=${errorCode}, msg=${errorMessage}`);
                 break;
         }
     }
@@ -357,17 +306,10 @@ class SocketService {
         }
 
         try {
-            // Use api.refreshToken() with correct endpoint /api/v1/auth/refresh
             const data = await api.refreshToken(currentRefreshToken);
-
-            // Token rotation: save BOTH new tokens immediately
             chatStore.setTokens(data.access_token, data.refresh_token);
 
-            // Re-authenticate current WS with new access token
-            this.sendPayload({
-                type: 'auth',
-                token: data.access_token
-            });
+            this.sendPayload({ type: 'auth', token: data.access_token });
             this.isPaused = false;
             this.flushQueue();
         } catch (err) {
@@ -386,7 +328,7 @@ class SocketService {
             return;
         }
 
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000); // Max 10s
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
         this.reconnectAttempts++;
 
         if (this.reconnectTimeout) {
@@ -408,9 +350,10 @@ class SocketService {
 
     public sendPayload(payload: WS_Payload) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN && !this.isPaused) {
+            console.debug('[WS →]', payload.type, payload);
             this.socket.send(JSON.stringify(payload));
         } else if (payload.type === 'message') {
-            console.warn('Socket offline/paused. Cannot send raw payload directly. Use sendMessage to queue.');
+            console.warn('Socket offline/paused. Use sendMessage to queue.');
         }
     }
 
@@ -420,11 +363,7 @@ class SocketService {
                 type: 'message',
                 room_id: message.room_id,
                 message_id: message.message_id,
-                data: {
-                    ciphertext: message.ciphertext,
-                    text: message.text, // Normally only ciphertext
-                    aad_data: message.aad_data
-                }
+                content: message.content
             };
             this.socket.send(JSON.stringify(payload));
         } else {
@@ -444,4 +383,3 @@ class SocketService {
 }
 
 export const socketService = SocketService.getInstance();
-

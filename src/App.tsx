@@ -7,7 +7,7 @@ import { ToastContainer } from '@/components/ui/Toast'
 import { socketService } from '@/services/SocketService'
 import { requestNotificationPermission } from '@/utils/notification'
 import { useAutoJoinRooms } from '@/hooks/useAutoJoinRooms'
-import { ShieldAlert, Lock } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 
 function App() {
   const isAuthenticated = useChatStore((state) => state.isAuthenticated)
@@ -47,20 +47,16 @@ function App() {
         <RoomList />
 
         {currentRoomId ? (
-          <ChatWindow roomId={currentRoomId} />
+          <ChatWindow key={currentRoomId} roomId={currentRoomId} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 animate-fade-in">
             <div className="w-20 h-20 rounded-3xl bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-center mb-6">
-              <ShieldAlert size={36} className="text-emerald-600/50" />
+              <MessageSquare size={36} className="text-emerald-600/50" />
             </div>
-            <h1 className="text-2xl font-bold text-zinc-300 mb-2">Trò chuyện Bảo mật</h1>
+            <h1 className="text-2xl font-bold text-zinc-300 mb-2">Core Chat</h1>
             <p className="text-sm text-zinc-500 mb-6 max-w-xs text-center">
-              Chọn một cuộc trò chuyện từ danh sách để bắt đầu nhắn tin an toàn.
+              Chọn một cuộc trò chuyện từ danh sách để bắt đầu.
             </p>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-600">
-              <Lock size={12} />
-              <span>Tin nhắn được mã hóa giao thức Signal</span>
-            </div>
           </div>
         )}
       </div>

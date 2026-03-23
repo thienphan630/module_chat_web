@@ -1,8 +1,8 @@
 import type {
     RegisterPayload, LoginPayload, AuthResponse,
     Room, RoomMember, CreateRoomPayload, InviteMembersPayload,
-    UploadKeysPayload, FetchKeysPayload, FetchKeysResponse, ChatMessage,
-    UserSearchResult, RoomMembersResponse
+    ChatMessage, UserSearchResult, RoomMembersResponse,
+    UserProfile, UpdateProfilePayload, UpdateRoomPayload
 } from '../types/chat.types'
 import { apiClient } from './axios-instance'
 
@@ -15,7 +15,6 @@ function handleNetworkError(err: unknown): never {
     }
     throw err
 }
-
 
 export const api = {
     // --- Authentication ---
@@ -80,14 +79,28 @@ export const api = {
         return response.json()
     },
 
-    // --- E2EE Key Management ---
-
-    async uploadKeys(payload: UploadKeysPayload): Promise<void> {
-        await apiClient.post('/api/v1/e2ee/keys', payload)
+    async logout(refreshToken: string): Promise<void> {
+        try {
+            await apiClient.post('/api/v1/auth/logout', { refresh_token: refreshToken })
+        } catch {
+            // Idempotent — always clear local state regardless
+        }
     },
 
-    async fetchKeys(payload: FetchKeysPayload): Promise<FetchKeysResponse> {
-        const { data } = await apiClient.post('/api/v1/e2ee/keys/fetch', payload)
+    // --- User Profile ---
+
+    async getMyProfile(): Promise<{ success: boolean; user: UserProfile }> {
+        const { data } = await apiClient.get('/api/v1/users/me')
+        return data
+    },
+
+    async getUserProfile(userId: string): Promise<{ success: boolean; user: UserProfile }> {
+        const { data } = await apiClient.get(`/api/v1/users/${userId}`)
+        return data
+    },
+
+    async updateMyProfile(payload: UpdateProfilePayload): Promise<{ success: boolean; user: UserProfile }> {
+        const { data } = await apiClient.patch('/api/v1/users/me', payload)
         return data
     },
 
@@ -105,6 +118,11 @@ export const api = {
 
     async getRoomDetail(roomId: string): Promise<{ room: Room }> {
         const { data } = await apiClient.get(`/api/v1/rooms/${roomId}`)
+        return data
+    },
+
+    async updateRoom(roomId: string, payload: UpdateRoomPayload): Promise<{ room: Room }> {
+        const { data } = await apiClient.patch(`/api/v1/rooms/${roomId}`, payload)
         return data
     },
 
@@ -131,31 +149,25 @@ export const api = {
 
     // --- Message Sync & History ---
 
-    /**
-     * Sync messages from server.
-     * - Without afterServerTs: returns latest N messages (initial load)
-     * - With afterServerTs: returns messages newer than timestamp (incremental sync)
-     */
-    async syncMessages(roomId: string, afterServerTs?: number, limit: number = 50): Promise<{ data: ChatMessage[] }> {
+    async syncMessages(
+        roomId: string,
+        opts?: { afterServerTs?: number; beforeServerTs?: number },
+        limit: number = 50
+    ): Promise<{ data: ChatMessage[] }> {
         const params: Record<string, any> = { room_id: roomId, limit }
-        if (afterServerTs) params.after_server_ts = afterServerTs
+        if (opts?.afterServerTs) params.after_server_ts = opts.afterServerTs
+        if (opts?.beforeServerTs) params.before_server_ts = opts.beforeServerTs
         const { data } = await apiClient.get('/api/v1/messages/sync', { params })
         return data
     },
 
-    // --- Read Receipts ---
-
-    /** Mark message as read. Fire-and-forget — receipt is non-critical for UX. */
-    async sendReceipt(roomId: string, messageId: string): Promise<void> {
-        await apiClient.post(`/api/v1/rooms/${roomId}/receipts`, { message_id: messageId })
+    async deleteMessage(roomId: string, messageId: string): Promise<void> {
+        await apiClient.delete(`/api/v1/rooms/${roomId}/messages/${messageId}`)
     },
 
+    // --- Read Receipts ---
 
-
-
-    async uploadFile(_blob: Blob): Promise<string> {
-        await new Promise(r => setTimeout(r, 1500));
-        return 'https://mock-s3.url/' + crypto.randomUUID();
-    }
+    async sendReceipt(roomId: string, messageId: string): Promise<void> {
+        await apiClient.post(`/api/v1/rooms/${roomId}/receipts`, { last_read_message_id: messageId })
+    },
 }
-

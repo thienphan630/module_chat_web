@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useChatStore } from '../../store/chatStore'
@@ -9,6 +9,18 @@ import { ConnectionBadge } from '../ui/ConnectionBadge'
 import { RoomSkeleton } from '../ui/Skeleton'
 import { UserProfileCard } from './UserProfileCard'
 
+function formatRelativeTime(ts: number): string {
+    const diff = Date.now() - ts
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return 'vừa xong'
+    if (mins < 60) return `${mins}p`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d`
+    return new Date(ts).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+}
+
 export const RoomList = () => {
     const { currentRoomId, setCurrentRoomId } = useChatStore()
     const [showCreateRoom, setShowCreateRoom] = useState(false)
@@ -16,10 +28,19 @@ export const RoomList = () => {
     const { data: rooms, isLoading } = useQuery({
         queryKey: ['my-rooms'],
         queryFn: api.getMyRooms,
-        refetchInterval: 10000, // Poll every 10s to discover new rooms since backend doesn't broadcast 'room_invited'
+        refetchInterval: 10000,
     })
 
-    // Only switch active room UI — auto-join (useAutoJoinRooms) keeps all rooms subscribed
+    // Sort rooms: latest message activity first
+    const sortedRooms = useMemo(() => {
+        if (!rooms) return []
+        return [...rooms].sort((a, b) => {
+            const tsA = a.last_message?.server_ts ?? 0
+            const tsB = b.last_message?.server_ts ?? 0
+            return tsB - tsA
+        })
+    }, [rooms])
+
     const handleJoinRoom = (roomId: string) => {
         if (currentRoomId === roomId) return
         setCurrentRoomId(roomId)
@@ -52,7 +73,7 @@ export const RoomList = () => {
                         <RoomSkeleton />
                         <RoomSkeleton />
                     </div>
-                ) : !rooms || rooms.length === 0 ? (
+                ) : !sortedRooms || sortedRooms.length === 0 ? (
                     <div className="flex flex-col items-center justify-center text-center mt-16 px-6">
                         <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
                             <MessageSquarePlus size={24} className="text-zinc-600" />
@@ -64,7 +85,7 @@ export const RoomList = () => {
                     </div>
                 ) : (
                     <ul>
-                        {rooms.map((room, idx) => (
+                        {sortedRooms.map((room, idx) => (
                             <li
                                 key={room.room_id}
                                 onClick={() => handleJoinRoom(room.room_id)}
@@ -76,22 +97,33 @@ export const RoomList = () => {
                                 style={{ animationDelay: `${idx * 30}ms` }}
                             >
                                 <div className="flex items-center gap-3">
-                                    <Avatar userId={room.room_id} name={room.room_name} size="lg" />
+                                    <div className="relative">
+                                        <Avatar userId={room.room_id} name={room.room_name} size="lg" />
+                                        {/* Unread dot */}
+                                        {room.unread_count > 0 && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-zinc-900 shadow-lg shadow-emerald-500/20" />
+                                        )}
+                                    </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-baseline mb-0.5">
-                                            <h3 className="font-medium text-zinc-200 truncate pr-2 text-sm">
+                                            <h3 className={`font-medium truncate pr-2 text-sm ${
+                                                room.unread_count > 0 ? 'text-zinc-100' : 'text-zinc-200'
+                                            }`}>
                                                 {room.room_name || room.room_id}
                                             </h3>
-                                            <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-md font-medium ${
-                                                room.room_type === 'direct'
-                                                    ? 'text-blue-400 bg-blue-500/10'
-                                                    : 'text-purple-400 bg-purple-500/10'
-                                            }`}>
-                                                {room.room_type === 'direct' ? 'Cá nhân' : 'Nhóm'}
-                                            </span>
+                                            {room.last_message && (
+                                                <span className="text-[10px] text-zinc-600 shrink-0">
+                                                    {formatRelativeTime(room.last_message.server_ts)}
+                                                </span>
+                                            )}
                                         </div>
-                                        <p className="text-xs text-zinc-500 truncate">
-                                            🔒 E2EE • {room.role}
+                                        <p className={`text-xs truncate ${
+                                            room.unread_count > 0 ? 'text-zinc-300 font-medium' : 'text-zinc-500'
+                                        }`}>
+                                            {room.last_message
+                                                ? room.last_message.content
+                                                : room.room_type === 'direct' ? 'Cá nhân' : 'Nhóm'
+                                            }
                                         </p>
                                     </div>
                                 </div>

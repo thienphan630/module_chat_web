@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LoginForm } from '../components/auth/LoginForm'
 import { RegisterForm } from '../components/auth/RegisterForm'
-import { ShieldAlert, Lock } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 
 type AuthMode = 'login' | 'register'
 
@@ -23,13 +23,10 @@ export const AuthPage = () => {
                 {/* Logo area */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4 animate-pulse-glow">
-                        <ShieldAlert size={28} className="text-emerald-400" />
+                        <MessageSquare size={28} className="text-emerald-400" />
                     </div>
-                    <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Trò chuyện Bảo mật</h1>
-                    <div className="flex items-center justify-center gap-1.5 mt-2 text-zinc-500 text-sm">
-                        <Lock size={12} />
-                        <span>Luôn mã hóa đầu cuối.</span>
-                    </div>
+                    <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">Core Chat</h1>
+                    <p className="text-zinc-500 text-sm mt-2">Nhắn tin nhanh, an toàn.</p>
                 </div>
 
                 {/* Form card — glass morphism */}
@@ -43,11 +40,8 @@ export const AuthPage = () => {
 
                 {/* Footer */}
                 <div className="text-center mt-6 space-y-1">
-                    <p className="text-zinc-600 text-xs">
-                        Signal Protocol • X25519 ECDH • AES-GCM
-                    </p>
                     <p className="text-zinc-700 text-[10px]">
-                        Tin nhắn được mã hóa ngay trên thiết bị của bạn.
+                        © 2026 Core Chat
                     </p>
                 </div>
             </div>
